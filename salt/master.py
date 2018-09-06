@@ -1045,18 +1045,16 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
                'clear': self._handle_clear}[key](load)
         raise tornado.gen.Return(ret)
 
-    def _post_stats(self, start, cmd):
+    def _post_stats(self, stats):
         '''
-        Calculate the master stats and fire events with stat info
+        Fire events with stat info if it's time
         '''
-        end = time.time()
-        duration = end - start
-        self.stats[cmd]['mean'] = (self.stats[cmd]['mean'] * (self.stats[cmd]['runs'] - 1) + duration) / self.stats[cmd]['runs']
-        if end - self.stat_clock > self.opts['master_stats_event_iter']:
+        end_time = time.time()
+        if end_time - self.stat_clock > self.opts['master_stats_event_iter']:
             # Fire the event with the stats and wipe the tracker
-            self.aes_funcs.event.fire_event({'time': end - self.stat_clock, 'worker': self.name, 'stats': self.stats}, tagify(self.name, 'stats'))
-            self.stats = collections.defaultdict(lambda: {'mean': 0, 'runs': 0})
-            self.stat_clock = end
+            self.aes_funcs.event.fire_event({'time': end_time - self.stat_clock, 'worker': self.name, 'stats': stats}, tagify(self.name, 'stats'))
+            self.stats = collections.defaultdict(lambda: {'mean': 0, 'latency': 0, 'runs': 0})
+            self.stat_clock = end_time
 
     def _handle_clear(self, load):
         '''
@@ -1107,7 +1105,6 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             return False
         if self.opts['master_stats']:
             start = time.time()
-            self.stats[cmd]['runs'] += 1
 
         def run_func(data):
             return self.aes_funcs.run_func(data['cmd'], data)
@@ -1118,7 +1115,8 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             ret = run_func(data)
 
         if self.opts['master_stats']:
-            self._post_stats(start, cmd)
+            stats = salt.utils.event.update_stats(self.stats, start, data)
+            self._post_stats(stats)
         return ret
 
     def run(self):
