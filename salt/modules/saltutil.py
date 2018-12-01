@@ -1006,7 +1006,7 @@ def refresh_beacons():
     try:
         ret = __salt__['event.fire']({}, 'beacons_refresh')
     except KeyError:
-        log.error('Event module not available. Module refresh failed.')
+        log.error('Event module not available. Beacon refresh failed.')
         ret = False  # Effectively a no-op, since we can't really return without an event system
     return ret
 
