@@ -465,3 +465,22 @@ def flush(bank, key=None, cachedir=None):
     except TypeError:
         cache = salt.cache.Cache(__opts__)
     return cache.flush(bank, key)
+
+def contains(bank, key, cachedir=None):
+    '''
+    Return True/False if the key is associated wth the salt.cache bank
+
+    CLI Examples:
+
+    .. code-block:: bash
+
+        salt-run cache.contains cloud/active/ec2/myec2 myminion cachedir=/var/cache/salt/
+    '''
+    if cachedir is None:
+        cachedir = __opts__['cachedir']
+
+    try:
+        cache = salt.cache.Cache(__opts__, cachedir=cachedir)
+    except TypeError:
+        cache = salt.cache.Cache(__opts__)
+    return cache.contains(bank, key)

@@ -253,7 +253,7 @@ class LoadAuth(object):
 
     def list_tokens(self):
         '''
-        List all tokens in eauth_tokn storage.
+        List all tokens in eauth_token storage.
         '''
         return self.tokens["{0}.list_tokens".format(self.opts['eauth_tokens'])](self.opts)
 
@@ -262,6 +262,23 @@ class LoadAuth(object):
         Remove the given token from token storage.
         '''
         self.tokens["{0}.rm_token".format(self.opts['eauth_tokens'])](self.opts, tok)
+
+    def clean_expired_tokens(self):
+        '''
+        Clean expired tokens
+        '''
+        log.debug("cleaning expired tokens using token driver: {}".format(self.opts['eauth_tokens']))
+
+        # If the token driver has a clean_expired_tokens() func, call it to clean up 
+        # expired tokens.
+        clean_expired_fun = "{}.clean_expired_tokens".format(self.opts['eauth_tokens'])
+        if clean_expired_fun in self.tokens:
+            self.tokens[clean_expired_fun](self.opts)
+        else:
+            for token in self.list_tokens():
+                token_data = self.get_tok(token)
+                if 'expire' not in token_data or token_data.get('expire', 0) < time.time():
+                    self.rm_token(token)
 
     def authenticate_token(self, load):
         '''
@@ -750,6 +767,15 @@ class Resolver(object):
         load['cmd'] = 'get_token'
         tdata = self._send_token_request(load)
         return tdata
+
+    def rm_token(self, token):
+        '''
+        Delete a token from the master
+        '''
+        load = {}
+        load['token'] = token
+        load['cmd'] = 'rm_token'
+        self._send_token_request(load)
 
 
 class AuthUser(object):

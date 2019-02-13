@@ -2034,6 +2034,14 @@ class ClearFuncs(object):
             return False
         return self.loadauth.get_tok(clear_load['token'])
 
+    def rm_token(self, clear_load):
+        '''
+        Remove a token
+        '''
+        if 'token' not in clear_load:
+            return False
+        return self.loadauth.rm_token(clear_load['token'])
+
     def publish(self, clear_load):
         '''
         This method sends out publications to the minions, it can only be used

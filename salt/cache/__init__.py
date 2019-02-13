@@ -12,6 +12,7 @@ import time
 
 # Import Salt libs
 import salt.config
+import salt.exceptions
 from salt.ext import six
 from salt.payload import Serial
 from salt.utils.odict import OrderedDict
@@ -73,7 +74,12 @@ class Cache(object):
             self.cachedir = opts.get('cachedir', salt.syspaths.CACHE_DIR)
         else:
             self.cachedir = cachedir
-        self.driver = opts.get('cache', salt.config.DEFAULT_MASTER_OPTS['cache'])
+
+        if 'driver' in kwargs:
+            self.driver = kwargs['driver']
+        else:
+            self.driver = opts.get('cache', salt.config.DEFAULT_MASTER_OPTS['cache'])
+
         self.serial = Serial(opts)
         self._modules = None
         self._kwargs = kwargs
@@ -267,6 +273,32 @@ class Cache(object):
         '''
         fun = '{0}.contains'.format(self.driver)
         return self.modules[fun](bank, key, **self._kwargs)
+
+    def clean_expired(self, bank):
+        '''
+        Clean expired keys
+
+        :param bank:
+            The name of the location inside the cache which will hold the key
+            and its associated data.
+
+        :raises SaltCacheError:
+            Raises an exception if cache driver detected an error accessing data
+            in the cache backend (auth, permissions, etc).
+        '''
+        # If the cache driver has a clean_expired() func, call it to clean up
+        # expired keys.
+        clean_expired = '{0}.clean_expired'.format(self.driver)
+        if clean_expired in self.modules:
+            self.modules[clean_expired](bank)
+        else:
+            list_ = '{}.list'.format(self.driver)
+            updated = '{}.updated'.format(self.driver)
+            flush = '{}.flush'.format(self.driver)
+            for key in self.modules[list_](bank, **self._kwargs):
+                ts = self.modules[updated](bank, key, **self._kwargs)
+                if ts is not None and ts <= time.time():
+                    self.modules[flush](bank, key, **self._kwargs)
 
 
 class MemCache(Cache):

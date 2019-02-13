@@ -814,6 +814,7 @@ VALID_OPTS = immutabletypes.freeze({
     # Subsystem to use to maintain eauth tokens. By default, tokens are stored on the local
     # filesystem
     'eauth_tokens': six.string_types,
+    'eauth_cache_driver': six.string_types,
 
     # The number of open files a daemon is allowed to have open. Frequently needs to be increased
     # higher than the system default in order to account for the way zeromq consumes file handles.
@@ -1669,6 +1670,7 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'keep_acl_in_token': False,
     'eauth_acl_module': '',
     'eauth_tokens': 'localfs',
+    'eauth_cache_driver': '',
     'extension_modules': os.path.join(salt.syspaths.CACHE_DIR, 'master', 'extmods'),
     'module_dirs': [],
     'file_recv': False,
