@@ -354,7 +354,7 @@ def gen(id_=None, keysize=2048):
         id_ = clean.filename(id_)
     ret = {'priv': '',
            'pub': ''}
-    priv = salt.crypt.gen_keys(__opts__['pki_dir'], id_, keysize)
+    priv = salt.crypt.gen_keys(__opts__['pki_dir'], id_, keysize, permissive=__opts__['permissive_pki_access'])
     pub = '{0}.pub'.format(priv[:priv.rindex('.')])
     with salt.utils.files.fopen(priv) as fp_:
         ret['priv'] = salt.utils.stringutils.to_unicode(fp_.read())
@@ -426,7 +426,7 @@ def gen_keys(keydir=None, keyname=None, keysize=None, user=None):
     Generate minion RSA public keypair
     '''
     skey = get_key(__opts__)
-    return skey.gen_keys(keydir, keyname, keysize, user)
+    return skey.gen_keys(keydir, keyname, keysize, user, permissive=__opts__['permissive_pki_access'])
 
 
 def gen_signature(priv, pub, signature_path, auto_create=False, keysize=None):

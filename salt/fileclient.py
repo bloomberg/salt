@@ -144,7 +144,7 @@ class Client(object):
                                     saltenv,
                                     path)
         destdir = os.path.dirname(dest)
-        with salt.utils.files.set_umask(0o077):
+        with salt.utils.files.set_umask(self.opts['cachedir_umask']):
             # remove destdir if it is a regular file to avoid an OSError when
             # running os.makedirs below
             if os.path.isfile(destdir):
@@ -1143,9 +1143,10 @@ class RemoteClient(Client):
                             raise
                 else:
                     return False
-            # We need an open filehandle here, that's why we're not using a
-            # with clause:
-            fn_ = salt.utils.files.fopen(dest, 'wb+')  # pylint: disable=resource-leakage
+            with salt.utils.files.set_umask(self.opts['cachedir_umask']):
+                # We need an open filehandle here, that's why we're not using a
+                # with clause:
+                fn_ = salt.utils.files.fopen(dest, 'wb+')  # pylint: disable=resource-leakage
         else:
             log.debug('No dest file found')
 
@@ -1171,8 +1172,9 @@ class RemoteClient(Client):
                                 saltenv,
                                 cachedir=cachedir) as cache_dest:
                             dest = cache_dest
-                            with salt.utils.files.fopen(cache_dest, 'wb+') as ofile:
-                                ofile.write(data['data'])
+                            with salt.utils.files.set_umask(self.opts['cachedir_umask']):
+                                with salt.utils.files.fopen(cache_dest, 'wb+') as ofile:
+                                    ofile.write(data['data'])
                     if 'hsum' in data and d_tries < 3:
                         # Master has prompted a file verification, if the
                         # verification fails, re-download the file. Try 3 times
@@ -1195,7 +1197,8 @@ class RemoteClient(Client):
                         # remove it to avoid a traceback trying to write the file
                         if os.path.isdir(dest):
                             salt.utils.files.rm_rf(dest)
-                        fn_ = salt.utils.atomicfile.atomic_open(dest, 'wb+')
+                        with salt.utils.files.set_umask(self.opts['cachedir_umask']):
+                            fn_ = salt.utils.atomicfile.atomic_open(dest, 'wb+')
                 if data.get('gzip', None):
                     data = salt.utils.gzip_util.uncompress(data['data'])
                 else:

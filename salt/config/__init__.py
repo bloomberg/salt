@@ -212,6 +212,9 @@ VALID_OPTS = immutabletypes.freeze({
     # The directory to store all cache files.
     'cachedir': six.string_types,
 
+    # The umask to be used for cache directory and files
+    'cachedir_umask': int,
+
     # Append minion_id to these directories.  Helps with
     # multiple proxies and minions running on the same machine.
     # Allowed elements in the list: pki_dir, cachedir, extension_modules, pidfile
@@ -1244,6 +1247,7 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'id': '',
     'id_function': {},
     'cachedir': os.path.join(salt.syspaths.CACHE_DIR, 'minion'),
+    'cachedir_umask': 0o077,
     'append_minionid_config_dirs': [],
     'cache_jobs': False,
     'grains_blacklist': [],
@@ -1538,6 +1542,7 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'pki_dir': os.path.join(salt.syspaths.CONFIG_DIR, 'pki', 'master'),
     'key_cache': '',
     'cachedir': os.path.join(salt.syspaths.CACHE_DIR, 'master'),
+    'cachedir_umask': 0o077,
     'file_roots': {
         'base': [salt.syspaths.BASE_FILE_ROOTS_DIR,
                  salt.syspaths.SPM_FORMULA_PATH]

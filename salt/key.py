@@ -346,7 +346,7 @@ class Key(object):
         '''
         keydir, keyname, keysize, user = self._get_key_attrs(keydir, keyname,
                                                              keysize, user)
-        salt.crypt.gen_keys(keydir, keyname, keysize, user, self.passphrase)
+        salt.crypt.gen_keys(keydir, keyname, keysize, user, self.passphrase, permissive=self.opts['permissive_pki_access'])
         return salt.utils.crypt.pem_finger(os.path.join(keydir, keyname + '.pub'))
 
     def gen_signature(self, privkey, pubkey, sig_path):
@@ -392,7 +392,8 @@ class Key(object):
                                     self.opts['master_sign_key_name'],
                                     keysize or self.opts['keysize'],
                                     self.opts.get('user'),
-                                    self.passphrase)
+                                    self.passphrase,
+                                    permissive=self.opts['permissive_pki_access'])
 
                 priv = self.opts['pki_dir'] + '/' + self.opts['master_sign_key_name'] + '.pem'
             else:

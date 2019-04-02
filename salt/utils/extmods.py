@@ -74,7 +74,7 @@ def sync(opts,
     source = salt.utils.url.create('_' + form)
     mod_dir = os.path.join(opts['extension_modules'], '{0}'.format(form))
     touched = False
-    with salt.utils.files.set_umask(0o077):
+    with salt.utils.files.set_umask(opts['cachedir_umask']):
         try:
             if not os.path.isdir(mod_dir):
                 log.info('Creating module dir \'%s\'', mod_dir)

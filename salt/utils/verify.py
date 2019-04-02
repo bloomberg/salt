@@ -291,9 +291,9 @@ def verify_env(
         # by the user running the master
         if dir_ == pki_dir:
             smode = stat.S_IMODE(mode.st_mode)
-            if smode != 448 and smode != 488:
+            if smode != 0o0700 and smode != 0o0750:
                 if os.access(dir_, os.W_OK):
-                    os.chmod(dir_, 448)
+                    os.chmod(dir_, 0o0750 if permissive else 0o0700)
                 else:
                     msg = 'Unable to securely set the permissions of "{0}".'
                     msg = msg.format(dir_)

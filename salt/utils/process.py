@@ -52,6 +52,8 @@ except ImportError:
     HAS_SETPROCTITLE = False
 
 
+Pipe = multiprocessing.Pipe
+
 def appendproctitle(name):
     '''
     Append "name" to the current process title
