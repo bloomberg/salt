@@ -1,0 +1,31 @@
+version: '2.4'
+x-base:
+    &base
+    ports:
+      - '4505-4506'
+    environment:
+      http_proxy: ''
+      HTTP_PROXY: ''
+      https_proxy: ''
+      HTTPS_PROXY: ''
+services:
+  auth_master:
+    <<: *base
+    image: artprod.dev.bloomberg.com/bb-inf/salt-master:2018.3.3
+    ports:
+      - '4505-4506'
+      - '8080-9081:80'
+    volumes:
+      - ./salt/:/usr/lib/python2.7/site-packages/salt
+      - ../salt-core/:/srv/salt-core
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../salt-core/tests/integration/assets/master/etc/salt/master.d/extra.conf:/etc/salt/master.d/extra.conf
+  auth_minion:
+    <<: *base
+    image: artprod.dev.bloomberg.com/bb-inf/salt-minion:2018.3.3
+    depends_on:
+      - auth_master
+    volumes:
+      - ./salt/:/usr/lib/python2.7/site-packages/salt
+      - ../salt-core/:/srv/salt-core
+      - /var/run/docker.sock:/var/run/docker.sock

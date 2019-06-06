@@ -7,6 +7,7 @@ Helpful decorators for module writing
 from __future__ import absolute_import, print_function, unicode_literals
 import functools
 import logging
+import os.path
 from boltons.funcutils import wraps
 
 # Import salt libs
@@ -19,9 +20,6 @@ from salt.ext import six
 
 log = logging.getLogger(__name__)
 
-# must match tag in salt.loader - some are plural some aren't
-SUPPORTED_TAGS = ['module', 'runners', 'wheel']
-
 class Authorize(object):
     '''
     This decorator will check if a given call is permitted based on the calling
@@ -32,19 +30,37 @@ class Authorize(object):
     ckminions = None
 
     def __init__(self, tag, item):
-        log.trace('Authorized decorator - tag %s applied', tag)
+        # log.trace('Authorized decorator - tag %s applied', tag)
+        log.debug('Authorized decorator - tag %s item %s applied', tag, item)
         self.tag = tag
         self.item = item
 
     def __call__(self, f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-                # if an auth_check is present, enforce it
+            # This is only for master side, will leave minions to be regulated by publisher_acl
+            # if __grains__['id'] in __grains__['master']:
+            if os.path.exists('/etc/salt/pki/master/minions'):
+                log.debug('000000 salt/utils/decorators/acl.py on master, continue 000000')
+            else:
+                log.debug('000000 salt/utils/decorators/acl.py on minion, skip 000000')
+                return f(*args, **kwargs)
+            # if an auth_check is present, enforce it
             if 'auth_check' not in RequestContext.current:
-                log.trace('auth_check not in RequestContext. no-op')
+                log.debug('auth_check not in RequestContext. no-op')
                 return f(*args, **kwargs)
 
             auth_check = RequestContext.current['auth_check']
+            # sample auth_check value:
+            # auth_check: {
+            #     'auth_list': ['@jobs', '@runner', 'test.ping'],
+            #     'username': 'salt',
+            #     'tags': ['states'], <== as set in salt/auth/__init__.py class LoadAuth def check_authentication
+            #     'error': {}
+            # }
+            # RequestContext.current itself contains the current salt env
+            log.debug('000000 Checked tags are: %s 000000', auth_check['tags'])
+            log.debug('000000 auth list is: %s 000000', auth_check['auth_list'])
 
             if not self.ckminions:
                 # late import to avoid circular dependencies
@@ -53,24 +69,18 @@ class Authorize(object):
 
             # only apply acl if it is listed in auth_list tag set
             if self.tag not in auth_check.get('tags', []):
-                log.trace('loader tag %s not in auth_check tags enforcement list. noop', self.tag)
+                log.debug('loader tag %s not in auth_check tags enforcement list. noop', self.tag)
                 return f(*args, **kwargs)
 
-            # borrowed fromalt.utils.decorators.Depends
-            import pprint ;pprint.pprint(self.item)
-
             if self.tag == 'runners':
+                # return f(*args, **kwargs)
                 runner_check = self.ckminions.runner_check(
                     auth_check.get('auth_list', []),
                     self.item,
                     {'arg': args, 'kwargs': kwargs},
                 )
 
-                log.error("WTF")
-                log.error("WTF")
-                log.error("WTF")
-                log.error("WTF")
-                log.error(runner_check)
+                log.debug('000000 tag: runners item: %s args: %s kwargs: %s runner_check result: %s 000000', self.item, args, kwargs, runner_check)
 
                 if not runner_check:
                     return {'error': {'name': 'EauthAuthenticationError',
@@ -83,11 +93,33 @@ class Authorize(object):
                 # if we've made it here, we are good. call the func
                 return f(*args, **kwargs)
 
+            if self.tag == 'module':
+                module_check = self.ckminions.spec_check(
+                    auth_check.get('auth_list', []),
+                    self.item,
+                    {'arg': args, 'kwargs': kwargs},
+                    'module',
+                )
+
+                log.debug('000000 tag: module item: %s args: %s kwargs: %s spec_check result: %s 000000', self.item, args, kwargs, module_check)
+
+                if not module_check:
+                    return {'error': {'name': 'EauthAuthenticationError',
+                                       'message': 'Authentication failure of type "eauth" occurred for '
+                                                 'user {0}.'.format(auth_check['user'])}}
+                elif isinstance(module_check, dict) and 'error' in module_check:
+                    # A dictionary with an error name/message was handled by ckminions.runner_check
+                    return module_check
+
+                # if we've made it here, we are good. call the func
+                return f(*args, **kwargs)
+
             if self.tag == 'module' and False:
                 # do the same stuff as above for minion...  ckminion will
                 # likely need to be modified to support running minino side, it
                 # might make assumptions about being on the master
                 # also need to account for master and minion side minionmod invocation
+                # return f(*args, **kwargs)
                 minion_check = self.ckminions.auth_check(
                     auth_list,
                     clear_load['fun'],

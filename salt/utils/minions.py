@@ -1052,6 +1052,11 @@ class CkMinions(object):
                 if ind[0] == '@':
                     if ind[1:] == mod_name or ind[1:] == form or ind == '@{0}s'.format(form):
                         return True
+                # the following 3 lines are added by wgao
+                else: # added for local module check with auth item as a string of fun.module
+                    if self.match_check(ind, fun):
+                        return True
+                # end of wgao added section
             elif isinstance(ind, dict):
                 if len(ind) != 1:
                     continue
@@ -1063,6 +1068,12 @@ class CkMinions(object):
                     if valid[1:] == form or valid == '@{0}s'.format(form):
                         if self.__fun_check(ind[valid], fun, args.get('arg'), args.get('kwarg')):
                             return True
+                # the following 3 lines are added by wgao
+                if valid == '*': # auth for all minions, including itself
+                    for _ind_auth in ind[valid]:
+                        if self.match_check(_ind_auth, fun):
+                            return True
+                # end of wgao added section
         return False
 
     def __fun_check(self, valid, fun, args=None, kwargs=None):

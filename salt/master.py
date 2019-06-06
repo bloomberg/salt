@@ -1902,7 +1902,9 @@ class ClearFuncs(object):
         Send a master control function back to the runner system
         '''
         # All runner ops pass through eauth
+        log.debug('000000 salt/master.py class ClearFuncs def runner started with clear load: %s 000000', clear_load)
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
+        log.debug('000000 salt/master.py class ClearFuncs def runner auth type: %s 000000', auth_type)
 
         # Authenticate
         auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
@@ -1943,6 +1945,7 @@ class ClearFuncs(object):
         try:
             # store auth_check for later nested authorizations from this call
             RequestContext.current['auth_check'] = auth_check
+            log.debug('000000 salt/master.py class ClearFuncs def runner set RequestContext auth_check with: %s 000000', auth_check)
 
             fun = clear_load.pop('fun')
             runner_client = salt.runner.RunnerClient(self.opts)
@@ -2079,18 +2082,26 @@ class ClearFuncs(object):
         by the LocalClient.
         '''
         extra = clear_load.get('kwargs', {})
+        log.debug('000000 salt/master.py class ClearFuncs def publish clear_load kwargs: %s extra: %s000000', clear_load['kwargs'], extra)
 
-        publisher_acl = salt.acl.PublisherACL(self.opts['publisher_acl_blacklist'])
+        # log.debug('000000 salt/master.py class ClearFuncs def publish publisher_acl: %s', self.opts['publisher_acl'])
+        # log.debug('000000 salt/master.py class ClearFuncs def publish publisher_acl_blacklist: %s', self.opts['publisher_acl_blacklist'])
+        # publisher_acl = salt.acl.PublisherACL(self.opts['publisher_acl'], self.opts['publisher_acl_blacklist'])
+        # log.debug('000000 salt/master.py class ClearFuncs def publish publisher_acl: %s', vars(publisher_acl))
+        # log.debug('000000 salt/master.py class ClearFuncs def publish clear_load user: %s fun: %s', clear_load['user'], clear_load['fun'])
 
-        if publisher_acl.user_is_blacklisted(clear_load['user']) or \
-                publisher_acl.cmd_is_blacklisted(clear_load['fun']):
-            log.error(
-                '%s does not have permissions to run %s. Please contact '
-                'your local administrator if you believe this is in '
-                'error.\n', clear_load['user'], clear_load['fun']
-            )
-            return {'error': {'name': 'AuthorizationError',
-                              'message': 'Authorization error occurred.'}}
+        # wgao modification
+        # if publisher_acl.user_is_blacklisted(clear_load['user']) or \
+                # publisher_acl.cmd_is_blacklisted(clear_load['fun']):
+        # if not publisher_acl.user_cmd_is_permitted(user=clear_load['user'], cmd=clear_load['fun']):
+        # end of wgao modification
+            # log.error(
+                # '%s does not have permissions to run %s. Please contact '
+                # 'your local administrator if you believe this is in '
+                # 'error.\n', clear_load['user'], clear_load['fun']
+            # )
+            # return {'error': {'name': 'AuthorizationError',
+                              # 'message': 'Authorization error occurred.'}}
 
         # Retrieve the minions list
         delimiter = clear_load.get('kwargs', {}).get('delimiter', DEFAULT_TARGET_DELIM)
@@ -2105,12 +2116,14 @@ class ClearFuncs(object):
 
         # Check for external auth calls and authenticate
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(extra)
+        log.debug('000000 salt/master.py class ClearFuncs def publish auth_type: %s key: %s clear_load: %s 000000', auth_type, key, clear_load)
         if auth_type == 'user':
             auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
         else:
             auth_check = self.loadauth.check_authentication(extra, auth_type)
 
         # Setup authorization list variable and error information
+        log.debug('000000 salt/master.py class ClearFuncs def publish auth_check: %s 000000', auth_check)
         auth_list = auth_check.get('auth_list', [])
         err_msg = 'Authentication failure of type "{0}" occurred.'.format(auth_type)
 
@@ -2137,7 +2150,7 @@ class ClearFuncs(object):
             if not authorized:
                 # Authorization error occurred. Do not continue.
                 if auth_type == 'eauth' and not auth_list and 'username' in extra and 'eauth' in extra:
-                    log.debug('Auth configuration for eauth "%s" and user "%s" is empty', extra['eauth'], extra['username'])
+                    log.debug('000000 salt/master.py class ClearFuncs def publish NOT AUTHORIZED Auth configuration for eauth: %s user: %s is empty 000000', extra['eauth'], extra['username'])
                 log.warning(err_msg)
                 return {'error': {'name': 'AuthorizationError',
                                   'message': 'Authorization error occurred.'}}
@@ -2150,6 +2163,8 @@ class ClearFuncs(object):
             elif auth_type == 'eauth':
                 # The username we are attempting to auth with
                 clear_load['user'] = self.loadauth.load_name(extra)
+
+            log.debug('000000 salt/master.py class ClearFuncs def publish AUTHORIZED with updated clear_load user: %s', clear_load['user'])
 
         # If we order masters (via a syndic), don't short circuit if no minions
         # are found
@@ -2166,8 +2181,9 @@ class ClearFuncs(object):
                 }
 
         # store auth_check for later nested authorizations from this call
-        RequestContext.current['auth_check'] = auth_check
-        import pprint; pprint.pprint(clear_load)
+        # RequestContext.current['auth_check'] = auth_check
+        # log.debug('000000 salt/master.py class ClearFuncs def publish auth_check: %s 000000', auth_check)
+        # import pprint; pprint.pprint(clear_load)
 
         if extra.get('batch', None):
             return self.publish_batch(clear_load, extra, minions, missing)
@@ -2389,8 +2405,8 @@ class ClearFuncs(object):
             load['user'] = clear_load['user']
 
         # if there is an active auth_check in current context, pass it down
-        if 'auth_check' in RequestContext.current:
-            load['auth_check'] = RequestContext.current['auth_check']
+        # if 'auth_check' in RequestContext.current:
+            # load['auth_check'] = RequestContext.current['auth_check']
 
         else:
             log.info(
