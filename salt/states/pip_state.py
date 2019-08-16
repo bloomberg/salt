@@ -276,7 +276,8 @@ def _check_if_installed(prefix,
                         desired_version = version
                         break
             else:
-                desired_version = available_versions[-1]
+                if available_versions:
+                    desired_version = available_versions[-1]
             if not desired_version:
                 ret['result'] = True
                 ret['comment'] = ('Python package {0} was already '
