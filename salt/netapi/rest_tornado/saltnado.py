@@ -743,6 +743,8 @@ class SaltAuthHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
             # return since we don't want to execute any more
             return
 
+        self.set_cookie(AUTH_COOKIE_NAME, token['token'])
+
         ret = {'return': [{
             'token': token['token'],
             'expire': token['expire'],
