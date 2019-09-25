@@ -93,13 +93,18 @@ class Authorize(object):
                 # is strictly equivalent to opts['id']. for saltutil.cmd we do not duplicate the work done by the master,
                 # if a user is authorized to run saltutil.cmd he/she must still meet the equivalent acl work being done
                 # in done in salt.master.Master.publish to successfully publish to those minions
+                # chop off the _master masterminion id append, we treat real minion and master minion equivalently for acl purposes
+                if self.opts.get('__role') == 'master' and self.opts['id'].endswith('_master'):
+                    _id = self.opts['id'][0:-7]
+                else:
+                    _id = self.opts['id']
                 minion_check = self.ckminions.auth_check(
                     auth_list,
                     self.item,
                     [args, kwargs],
-                    self.opts['id'],
+                    _id,
                     'list',
-                    minions=[self.opts['id']],
+                    minions=[_id],
                     # always accept find_job
                     whitelist=['saltutil.find_job', 'saltutil.is_running', 'grains.get', 'config.get', 'config.option'],
                 )
@@ -109,7 +114,7 @@ class Authorize(object):
                     if auth_check == 'eauth' and not auth_list and 'username' in extra and 'eauth' in extra:
                         log.debug('Auth configuration for eauth "%s" and user "%s" is empty', extra['eauth'], extra['username'])
                     log.error("current auth_check profile: %s", auth_check)
-                    raise AuthorizationError('User \'{0}\' is not permissioned to execute module function \'{1}\' on minion \'{2}\''.format(auth_check.get('username', 'UNKNOWN'), self.item, self.opts['id']))
+                    raise AuthorizationError('User \'{0}\' is not permissioned to execute module function \'{1}\' on minion \'{2}\''.format(auth_check.get('username', 'UNKNOWN'), self.item, _id))
 
                 # if we've made it here, we are good. call the func
                 return f(*args, **kwargs)

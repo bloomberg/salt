@@ -278,7 +278,6 @@ class CkMinions(object):
         Retrieve complete minion list from PKI dir.
         Respects cache if configured
         '''
-        # we include self.opts['id'] here as a special case to pick up the masterminion _master id
         minions = []
         pki_cache_fn = os.path.join(self.opts['pki_dir'], self.acc, '.key_cache')
         try:
@@ -708,9 +707,6 @@ class CkMinions(object):
 
             # special case: permit opts['id'] to be valid in list context, it
             # maps to the master minion for orch eauth
-            if tgt_type== 'compound' and expr == self.opts.get('id'):
-                return {'minions': [self.opts['id']], 'missing': []}
-
             check_func = getattr(self, '_check_{0}_minions'.format(tgt_type), None)
 
             if tgt_type in ('grain',
@@ -1043,7 +1039,11 @@ class CkMinions(object):
         # assignment by id since the masterminion doesnt publish grains to cache
         for acl in auth_list:
             if isinstance(acl, dict) and '@master' in acl:
-                acl[self.opts['id']] = acl['@master']
+                if self.opts['id'].endswith('_master'):
+                    _id = self.opts['id'][0:-7]
+                else:
+                    _id = self.opts['id']
+                acl[_id] = acl['@master']
                 del acl['@master']
 
         return auth_list
@@ -1083,6 +1083,7 @@ class CkMinions(object):
             fun_name = comps[1]
         else:
             fun_name = mod_name = fun
+
         for ind in auth_list:
             if isinstance(ind, six.string_types):
                 if ind[0] == '@':
@@ -1172,7 +1173,7 @@ class RemoteCkMinions(CkMinions):
         '''
         stub _pki_minions to only be self
         '''
-        return [self.opts['id']]
+        return []
 
     def _check_cache_minions(self,
                              expr,
