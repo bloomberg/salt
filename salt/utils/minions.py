@@ -1173,7 +1173,7 @@ class RemoteCkMinions(CkMinions):
         '''
         stub _pki_minions to only be self
         '''
-        return []
+        return [self.opts['id']]
 
     def _check_cache_minions(self,
                              expr,
