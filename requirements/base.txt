@@ -7,3 +7,6 @@ tornado==4.5.3
 psutil==5.6.1
 boltons==19.1.0
 jmespath==0.9.4
+pythonnet==2.4.0; platform_system == "Windows"
+WMI==1.4.9; platform_system == "Windows"
+pywin32==225; platform_system == "Windows"
