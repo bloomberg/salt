@@ -1183,7 +1183,8 @@ class RemoteCkMinions(CkMinions):
                              regex_match=False,
                              exact_match=False):
 
-        mdata = self.opts.get('grains', {})
+        mdata = self.opts or {}
+        minions = []
 
         if mdata is None:
             return {'minions': [],

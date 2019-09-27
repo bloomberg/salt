@@ -43,6 +43,10 @@ class Authorize(object):
                 log.trace('auth_check not in RequestContext. no-op')
                 return f(*args, **kwargs)
 
+            if RequestContext.current['auth_check'].get('auth_type') == 'user':
+                log.trace('auth_check executing from user context. assuming root')
+                return f(*args, **kwargs)
+
             auth_check = RequestContext.current['auth_check']
             auth_list = auth_check.get('auth_list', [])
 
