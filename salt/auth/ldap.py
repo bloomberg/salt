@@ -214,7 +214,6 @@ def _bind(username, password, anonymous=False, opts=None):
         connargs['binddn'] = paramvalues['binddn']
         if paramvalues['bindpw']:
             params['mandatory'].append('bindpw')
-
     for name in params['mandatory']:
         connargs[name] = paramvalues[name]
 
@@ -230,7 +229,7 @@ def _bind(username, password, anonymous=False, opts=None):
             if len(result) < 1:
                 log.warning('Unable to find user %s', username)
                 return False
-            elif len(result) > 1:
+            elif len(result) >= 1:
                 # Active Directory returns something odd.  Though we do not
                 # chase referrals (ldap.set_option(ldap.OPT_REFERRALS, 0) above)
                 # it still appears to return several entries for other potential
