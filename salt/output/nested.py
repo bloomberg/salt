@@ -26,6 +26,7 @@ Example output::
 from __future__ import absolute_import, print_function, unicode_literals
 # Import python libs
 from numbers import Number
+import logging
 
 # Import salt libs
 import salt.output
@@ -33,6 +34,8 @@ import salt.utils.color
 import salt.utils.odict
 import salt.utils.stringutils
 from salt.ext import six
+
+log = logging.getLogger(__name__)
 
 
 class NestDisplay(object):
@@ -164,6 +167,13 @@ class NestDisplay(object):
                         '----------'
                     )
                 )
+
+            # defer to other outputter if key exists
+            if 'outputter' in ret and 'data' in ret:
+                inner_ret = salt.output.try_printout(ret['data'], ret['outputter'], __opts__)
+                padding = indent * ' '
+                out.append(''.join(padding+line for line in inner_ret.splitlines(True)))
+                return out
 
             # respect key ordering of ordered dicts
             if isinstance(ret, salt.utils.odict.OrderedDict):
