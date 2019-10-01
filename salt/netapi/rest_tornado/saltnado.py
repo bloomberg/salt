@@ -708,7 +708,11 @@ class SaltAuthHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
             {"status": "401 Unauthorized", "return": "Please log in"}
         '''
         self.set_status(401)
-        self.set_header('WWW-Authenticate', 'Basic')
+
+        if self.get_query_argument('auth', None) == 'basic':
+            self.set_header('WWW-Authenticate', 'Basic')
+        else:
+            self.set_header('WWW-Authenticate', 'Session')
 
         ret = {'status': '401 Unauthorized',
                'return': 'Please log in'}
