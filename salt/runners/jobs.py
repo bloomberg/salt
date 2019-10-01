@@ -576,10 +576,10 @@ def _format_jid_instance(jid, job, returns=None):
     else:
         ret = {'Function': job.get('fun', 'unknown-function'),
                'Arguments': list(job.get('arg', [])),
+               'User': job.get('user', 'root'),
                # unlikely but safeguard from invalid returns
                'Target': job.get('tgt', 'unknown-target'),
-               'Target-type': job.get('tgt_type', 'list'),
-               'User': job.get('user', 'root')}
+               'Target-type': job.get('tgt_type', 'list'),}
         ret['Results'] = returns
 
     if 'metadata' in job:
