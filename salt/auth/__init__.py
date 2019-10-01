@@ -412,10 +412,11 @@ class LoadAuth(object):
         else:
             eauth_config = copy.deepcopy(self.opts['external_auth'][eauth])
 
-            # if a default profile was specified, we must merge into each matcher
-            if default_config and eauth_config:
-                for matcher in eauth_config.keys():
-                    eauth_config[matcher] = default_config + eauth_config.get(matcher, [])
+            # if a default profile was specified, we must merge into name's matchers
+            if name in eauth_config:
+                eauth_config[name] = eauth_config[name] + default_config
+            else:
+                eauth_config[name] = default_config
 
         if not eauth_config:
             log.debug('eauth "%s" configuration is empty', eauth)
