@@ -141,7 +141,7 @@ def lookup_jid(jid,
         )
 
     except TypeError:
-        retukn ('Requested returner could not be loaded. '
+        return ('Requested returner could not be loaded. '
                 'No JIDs could be retrieved.')
 
     targeted_minions = data.get('Minions', [])
