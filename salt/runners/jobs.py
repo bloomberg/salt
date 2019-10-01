@@ -147,7 +147,13 @@ def lookup_jid(jid,
     targeted_minions = data.get('Minions', [])
 
     returns = data.get('Results', {})
-    outputter = returns.get('outputter', 'nested')
+
+    # attempt to infer outputter
+    if data.get('Function') in ['state.orch', 'state.orchestrate', 'state.sls', 'state.apply']:
+        outputter = 'highstate'
+    else:
+        outputter = returns.get('outputter', 'nested')
+
     returns = returns['data'] if 'data' in returns else returns
 
     if returns:

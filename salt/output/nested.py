@@ -168,9 +168,19 @@ class NestDisplay(object):
                     )
                 )
 
+            # if possible, attempt to infer nested highstate/custom outputter
+            inner_ret = None
             # defer to other outputter if key exists
             if 'outputter' in ret and 'data' in ret:
                 inner_ret = salt.output.try_printout(ret['data'], ret['outputter'], __opts__)
+
+            # unroll jobs.list_job output if it contains highstates
+            retvals = ret.values()
+            if retvals and all(isinstance(_ret, dict) and _ret.get('fun') == 'state.apply' for _ret in retvals):
+               zipped = {host: _ret.get('return', {}) for host, _ret in ret.items()}
+               inner_ret = salt.output.try_printout(zipped, 'highstate', __opts__)
+
+            if inner_ret:
                 padding = indent * ' '
                 out.append(''.join(padding+line for line in inner_ret.splitlines(True)))
                 return out
