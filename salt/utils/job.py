@@ -118,16 +118,15 @@ def store_job(opts, load, event=None, mminion=None):
         log.error(emsg)
         raise KeyError(emsg)
 
-    if job_cache != 'local_cache':
-        try:
-            mminion.returners[savefstr](load['jid'], load)
-        except KeyError as e:
-            log.error("Load does not contain 'jid': %s", e)
-        except Exception:
-            log.critical(
-                "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
-                exc_info=True
-            )
+    try:
+        mminion.returners[savefstr](load['jid'], load)
+    except KeyError as e:
+        log.error("Load does not contain 'jid': %s", e)
+    except Exception:
+        log.critical(
+            "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
+            exc_info=True
+        )
 
     try:
         mminion.returners[fstr](load)
