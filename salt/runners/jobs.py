@@ -18,6 +18,7 @@ import salt.utils.jid
 import salt.utils.master
 import salt.minion
 import salt.returners
+from salt.utils.odict import OrderedDict
 
 # Import 3rd-party libs
 from salt.ext import six
@@ -138,45 +139,33 @@ def lookup_jid(jid,
             ext_source=ext_source,
             display_progress=display_progress
         )
+
     except TypeError:
         return ('Requested returner could not be loaded. '
                 'No JIDs could be retrieved.')
 
     targeted_minions = data.get('Minions', [])
-    returns = data.get('Result', {})
+
+    returns = data.get('Results', {})
+    outputter = returns.get('outputter', 'nested')
+    returns = returns['data'] if 'data' in returns else returns
 
     if returns:
         for minion in returns:
             if display_progress:
                 __jid_event__.fire_event({'message': minion}, 'progress')
             if u'return' in returns[minion]:
-                if returned:
-                    ret[minion] = returns[minion].get(u'return')
+                ret[minion] = returns[minion].get(u'return')
+            elif 'return' in returns[minion]:
+                ret[minion] = returns[minion].get('return')
             else:
-                if returned:
-                    ret[minion] = returns[minion].get('return')
+                ret[minion] = returns[minion]
     if missing:
         for minion_id in (x for x in targeted_minions if x not in returns):
             ret[minion_id] = 'Minion did not return'
 
-    # We need to check to see if the 'out' key is present and use it to specify
-    # the correct outputter, so we get highstate output for highstate runs.
-    try:
-        # Check if the return data has an 'out' key. We'll use that as the
-        # outputter in the absence of one being passed on the CLI.
-        outputter = None
-        _ret = returns[next(iter(returns))]
-        if 'out' in _ret:
-            outputter = _ret['out']
-        elif 'outputter' in _ret.get('return', {}).get('return', {}):
-            outputter = _ret['return']['return']['outputter']
-    except (StopIteration, AttributeError):
-        pass
 
-    if outputter:
-        return {'outputter': outputter, 'data': ret}
-    else:
-        return ret
+    return {'outputter': outputter, 'data': ret}
 
 
 def list_job(jid, ext_source=None, display_progress=False):
@@ -210,11 +199,6 @@ def list_job(jid, ext_source=None, display_progress=False):
             {'message': 'Querying returner: {0}'.format(returner)},
             'progress'
         )
-
-    job = mminion.returners['{0}.get_load'.format(returner)](jid)
-    ret.update(_format_jid_instance(jid, job))
-    ret['Result'] = mminion.returners['{0}.get_jid'.format(returner)](jid)
-
     fstr = '{0}.get_endtime'.format(__opts__['master_job_cache'])
     if (__opts__.get('job_cache_store_endtime')
             and fstr in mminion.returners):
@@ -222,7 +206,22 @@ def list_job(jid, ext_source=None, display_progress=False):
         if endtime:
             ret['EndTime'] = endtime
 
-    return ret
+
+    job = mminion.returners['{0}.get_load'.format(returner)](jid)
+    returns = mminion.returners['{0}.get_jid'.format(returner)](jid)
+
+    ret.update(_format_jid_instance(jid, job, returns))
+
+    # transfer to an ordered dict so we can have a visually sensible order
+    ordered_ret = OrderedDict()
+    for key in ['StartTime', 'Function', 'Arguments', 'Target', 'Target-type', 'User', 'jid', 'Results']:
+        if key in ret:
+            ordered_ret[key] = ret.pop(key)
+
+    # pass everything else in
+    ordered_ret.update(ret)
+
+    return ordered_ret
 
 
 def list_jobs(ext_source=None,
@@ -555,20 +554,33 @@ def _get_returner(returner_types):
             return returner
 
 
-def _format_job_instance(job):
+def _format_jid_instance(jid, job, returns=None):
     '''
-    Helper to format a job instance
+    Helper to format jid instance
     '''
     if not job:
         ret = {'Error': 'Cannot contact returner or no job with this jid'}
         return ret
 
-    ret = {'Function': job.get('fun', 'unknown-function'),
-           'Arguments': list(job.get('arg', [])),
-           # unlikely but safeguard from invalid returns
-           'Target': job.get('tgt', 'unknown-target'),
-           'Target-type': job.get('tgt_type', 'list'),
-           'User': job.get('user', 'root')}
+    _return = job.get('return')
+    if isinstance(_return, dict) and _return.get('fun', '').startswith('runner.'):
+        _job = job['return']
+        ret = {'Function': _job.get('fun', 'unknown-function'),
+               'Arguments': list(_job.get('fun_args', [])),
+               'User': _job.get('user', 'root'),
+               # unlikely but safeguard from invalid returns
+               'Target': job.get('tgt', 'unknown-target'),
+               'Target-type': job.get('tgt_type', 'list'),}
+        # load contents for runners is equiv to returns, so we discard / dont need
+        ret['Results'] = _job['return']
+    else:
+        ret = {'Function': job.get('fun', 'unknown-function'),
+               'Arguments': list(job.get('arg', [])),
+               'User': job.get('user', 'root'),
+               # unlikely but safeguard from invalid returns
+               'Target': job.get('tgt', 'unknown-target'),
+               'Target-type': job.get('tgt_type', 'list'),}
+        ret['Results'] = returns
 
     if 'metadata' in job:
         ret['Metadata'] = job.get('metadata', {})
@@ -579,14 +591,7 @@ def _format_job_instance(job):
 
     if 'Minions' in job:
         ret['Minions'] = job['Minions']
-    return ret
 
-
-def _format_jid_instance(jid, job):
-    '''
-    Helper to format jid instance
-    '''
-    ret = _format_job_instance(job)
     ret.update({'StartTime': salt.utils.jid.jid_to_time(jid)})
     return ret
 

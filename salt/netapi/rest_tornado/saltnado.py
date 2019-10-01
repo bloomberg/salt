@@ -188,6 +188,7 @@ a return like::
 from __future__ import absolute_import, print_function, unicode_literals
 
 # Import Python libs
+import base64
 import time
 import fnmatch
 import logging
@@ -207,6 +208,7 @@ from tornado.concurrent import Future
 # salt imports
 import salt.ext.six as six
 import salt.netapi
+import salt.loader
 import salt.utils.args
 import salt.utils.event
 import salt.utils.jid
@@ -214,19 +216,26 @@ import salt.utils.json
 import salt.utils.yaml
 import salt.utils.zeromq
 from salt.utils.event import tagify
+from salt.utils.odict import OrderedDict
+import salt.loader
 import salt.client
 import salt.runner
 import salt.auth
 from salt.exceptions import (
     AuthenticationError,
     AuthorizationError,
-    EauthAuthenticationError
+    EauthAuthenticationError,
+    TokenAuthenticationError
 )
 
 salt.utils.zeromq.install_zmq()
 json = salt.utils.json.import_json()
 log = logging.getLogger(__name__)
 
+try:
+    import ansi2html
+except ImportError:
+    ansi2html = None
 
 def _json_dumps(obj, **kwargs):
     '''
@@ -309,6 +318,7 @@ class EventListener(object):
         for tag, matcher, future in self.request_map[request]:
             # timeout the future
             self._timeout_future(tag, matcher, future)
+
             # remove the timeout
             if future in self.timeout_map:
                 tornado.ioloop.IOLoop.current().remove_timeout(self.timeout_map[future])
@@ -400,10 +410,9 @@ class EventListener(object):
 
 
 class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
-    ct_out_map = (
-        ('application/json', _json_dumps),
-        ('application/x-yaml', salt.utils.yaml.safe_dump),
-    )
+    def _html_dumps(self, obj, **kwargs):
+        cli_output = self.outputters['nested'](obj)
+        return ansi2html.Ansi2HTMLConverter().convert(cli_output)
 
     def _verify_client(self, low):
         '''
@@ -420,6 +429,15 @@ class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
         '''
         Initialize the handler before requests are called
         '''
+        self.ct_out_map = [
+            ('application/json', _json_dumps),
+            ('application/x-yaml', salt.utils.yaml.safe_dump),
+        ]
+
+        # ansi2html is an optional dependency
+        if ansi2html:
+            self.ct_out_map.append(('text/html', self._html_dumps))
+
         if not hasattr(self.application, 'event_listener'):
             log.debug('init a listener')
             self.application.event_listener = EventListener(
@@ -440,6 +458,11 @@ class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
         if not hasattr(self, 'ckminions'):
             self.ckminions = salt.utils.minions.CkMinions.factory(self.application.opts)
 
+        if not hasattr(self, 'outputters'):
+            self.application.opts['color'] = True
+            self.application.opts['strip_color'] = False
+            self.outputters = salt.loader.outputters(self.application.opts)
+
     @property
     def token(self):
         '''
@@ -456,7 +479,44 @@ class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
         Boolean whether the request is auth'd
         '''
 
-        return self.token and bool(self.application.auth.get_tok(self.token))
+        if self.token and bool(self.application.auth.get_tok(self.token)):
+            return True
+
+        # pre-emptively clear a stale cookie, if set
+        self.clear_cookie(AUTH_COOKIE_NAME)
+
+        # accept basic auth if requested
+        eauth = self.request.query_arguments.get('eauth')
+        if eauth:
+            eauth = six.ensure_str(eauth[0])
+        else:
+            return False
+
+        if 'Authorization' in self.request.headers:
+            auth_header = self.request.headers['Authorization']
+            if auth_header is None or not auth_header.startswith('Basic '):
+                return False
+            decoded = base64.b64decode(auth_header[6:]).decode()
+            username, password = decoded.split(':', 2)
+
+            creds = {'username': username,
+                     'password': password,
+                     'eauth': eauth,
+                     'eauth_opts': {},
+                     }
+
+            token = self.application.auth.mk_token(creds)
+
+            if 'token' not in token or 'error' in token:
+                return False
+
+            self.set_cookie(AUTH_COOKIE_NAME, token['token'])
+            # get_cookie from above doesnt look at yet to be flushed so we set manually
+            self.request.headers[AUTH_TOKEN_HEADER] = token['token']
+
+            return True
+
+        return False
 
     def prepare(self):
         '''
@@ -648,7 +708,7 @@ class SaltAuthHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
             {"status": "401 Unauthorized", "return": "Please log in"}
         '''
         self.set_status(401)
-        self.set_header('WWW-Authenticate', 'Session')
+        self.set_header('WWW-Authenticate', 'Basic')
 
         ret = {'status': '401 Unauthorized',
                'return': 'Please log in'}
@@ -911,7 +971,8 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
             try:
                 chunk_ret = yield getattr(self, '_disbatch_{0}'.format(low['client']))(low)
                 ret.append(chunk_ret)
-            except (AuthenticationError, AuthorizationError, EauthAuthenticationError):
+            except (AuthenticationError, AuthorizationError, EauthAuthenticationError, TokenAuthenticationError):
+                self.set_status(401)
                 ret.append('Failed to authenticate')
                 break
             except Exception as ex:
@@ -919,6 +980,8 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
                 log.error('Unexpected exception while handling request:', exc_info=True)
 
         if not self._finished:
+            if self.get_query_argument('auth', None) == 'basic':
+                self.set_header('WWW-Authenticate', 'Basic realm=Restricted')
             self.write(self.serialize({'return': ret}))
             self.finish()
 
@@ -1371,13 +1434,18 @@ class JobsSaltAPIHandler(SaltAPIHandler):  # pylint: disable=W0223
         '''
         # if you aren't authenticated, redirect to login
         if not self._verify_auth():
-            self.redirect('/login')
+            if self.get_query_argument('auth', None) == 'basic':
+                self.set_status(401)
+                self.set_header('WWW-Authenticate', 'Basic realm=Restricted')
+                self.finish()
+            else:
+                self.redirect('/login')
             return
 
         if jid:
             self.lowstate = [{
                 'fun': 'jobs.list_job',
-                'jid': jid,
+                'arg': [jid],
                 'client': 'runner',
             }]
         else:
@@ -1387,6 +1455,32 @@ class JobsSaltAPIHandler(SaltAPIHandler):  # pylint: disable=W0223
             }]
 
         self.disbatch()
+
+    def serialize(self, data):
+        '''
+        Enforce odict ordering for list_jobs
+        '''
+        # transfer to an ordered dict so we can have a visually sensible order
+        def order(job):
+            ordered_ret = OrderedDict()
+            for key in ['StartTime', 'Function', 'Arguments', 'Target', 'Target-type', 'User', 'jid', 'Results', 'Minions']:
+                if key in job:
+                    ordered_ret[key] = job.pop(key)
+            # pass everything else in
+            ordered_ret.update(job)
+
+            return ordered_ret
+
+        ret = data['return'][0]
+        # assume if 'Function' is present it is list_job, else list_jobs
+        if 'Function' in ret:
+            data['return'] = [order(ret)]
+        else:
+            for jid in ret.keys():
+                ret[jid] = order(ret[jid])
+
+        return super(JobsSaltAPIHandler, self).serialize(data)
+
 
 
 class RunSaltAPIHandler(SaltAPIHandler):  # pylint: disable=W0223
