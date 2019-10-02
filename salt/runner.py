@@ -292,6 +292,8 @@ class Runner(RunnerClient):
                 except (KeyError, TypeError):
                     pass
 
+            # unfolding above may have introduced a non dict
+            if isinstance(ret, dict):
                 if set(ret) >= {'data', 'outputter'}:
                     outputter = ret['outputter']
 
