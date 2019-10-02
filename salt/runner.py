@@ -286,10 +286,12 @@ class Runner(RunnerClient):
             outputter = None
             if isinstance(ret, dict):
                 # unwrap a layer of the full_return
-                if 'data' in ret and 'return' in ret['data']:
-                    ret = ret['data']['return']
+                try:
+                    if 'data' in ret and 'return' in ret['data']:
+                         ret = ret['data']['return']
+                except (KeyError, TypeError):
+                    pass
 
-            if isinstance(ret, dict):
                 if set(ret) >= {'data', 'outputter'}:
                     outputter = ret['outputter']
 
