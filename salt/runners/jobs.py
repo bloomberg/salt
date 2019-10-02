@@ -148,15 +148,17 @@ def lookup_jid(jid,
 
     returns = data.get('Results', {})
 
+    outputter = None
     # attempt to infer outputter
     if data.get('Function') in ['state.orch', 'state.orchestrate', 'state.sls', 'state.apply']:
         outputter = 'highstate'
-    else:
-        outputter = returns.get('outputter', 'nested')
 
-    returns = returns['data'] if 'data' in returns else returns
-
-    if returns:
+    if data.get('Function').startswith('runner.'):
+        ret = data['Results']
+        outputter = outputter or 'nested'
+    elif isinstance(returns, dict):
+        returns = returns['data'] if 'data' in returns else returns
+        outputter = outputter or returns.get('outputter', 'nested')
         for minion in returns:
             if display_progress:
                 __jid_event__.fire_event({'message': minion}, 'progress')
@@ -166,10 +168,9 @@ def lookup_jid(jid,
                 ret[minion] = returns[minion].get('return')
             else:
                 ret[minion] = returns[minion]
-    if missing:
-        for minion_id in (x for x in targeted_minions if x not in returns):
-            ret[minion_id] = 'Minion did not return'
-
+        if missing:
+            for minion_id in (x for x in targeted_minions if x not in returns):
+                ret[minion_id] = 'Minion did not return'
 
     return {'outputter': outputter, 'data': ret}
 

@@ -764,7 +764,8 @@ class IPCMessageSubscriber(IPCClient):
             except Exception as exc:
                 log.error('Exception occurred while Subscriber connecting: %s', exc)
                 yield tornado.gen.sleep(1)
-        yield self._read_async(callback)
+            else:
+                yield self._read_async(callback)
 
     def close(self):
         '''

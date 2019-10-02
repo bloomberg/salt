@@ -1479,12 +1479,13 @@ class JobsSaltAPIHandler(SaltAPIHandler):  # pylint: disable=W0223
         # assume if 'Function' is present it is list_job, else list_jobs
         if 'Function' in ret:
             data['return'] = [order(ret)]
-        else:
+        elif isinstance(ret, dict):
             for jid in ret.keys():
+                if not salt.utils.jid.is_jid(jid):
+                    break
                 ret[jid] = order(ret[jid])
 
         return super(JobsSaltAPIHandler, self).serialize(data)
-
 
 
 class RunSaltAPIHandler(SaltAPIHandler):  # pylint: disable=W0223
