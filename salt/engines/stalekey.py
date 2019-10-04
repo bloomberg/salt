@@ -28,6 +28,7 @@ import salt.config
 import salt.key
 import salt.utils.files
 import salt.utils.minions
+import salt.utils.master
 import salt.utils.msgpack
 import salt.wheel
 
@@ -91,6 +92,17 @@ def start(interval=3600, expire=604800):
             for k in stale_keys:
                 log.info('Removing stale key for %s', k)
             wheel.cmd('key.delete', stale_keys)
+
+            pillar_util = salt.utils.master.MasterPillarUtil(','.join(stale_keys), 'list',
+                                                             use_cached_grains=True,
+                                                             grains_fallback=False,
+                                                             use_cached_pillar=True,
+                                                             pillar_fallback=False,
+                                                             opts=__opts__)
+            pillar_util.clear_cached_minion_data(clear_pillar=True,
+                                                 clear_grains=True,
+                                                 clear_mine=True)
+
             del minions[k]
 
         try:
