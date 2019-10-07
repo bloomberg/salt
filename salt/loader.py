@@ -674,7 +674,8 @@ def _load_cached_grains(opts, cfn):
         serial = salt.payload.Serial(opts)
         with salt.utils.files.fopen(cfn, 'rb') as fp_:
             cached_grains = salt.utils.data.decode(serial.load(fp_), preserve_tuples=True)
-        if not cached_grains:
+        # we do a sanity check to ensure a core grain is present
+        if not cached_grains or 'os_family' not in cached_grains:
             log.debug('Cached grains are empty, cache might be corrupted. Refreshing.')
             return None
 
