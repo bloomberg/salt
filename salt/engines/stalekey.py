@@ -60,12 +60,15 @@ def start(interval=3600, expire=604800):
         minions = {}
         if os.path.exists(presence_file):
             try:
-                with salt.utils.files.fopen(presence_file, 'r') as f:
+                with salt.utils.files.fopen(presence_file, 'rb') as f:
                     minions = salt.utils.msgpack.load(f)
             except IOError as e:
                 log.error('Could not open presence file %s: %s', presence_file, e)
                 time.sleep(interval)
                 continue
+            except ValueError as e:
+                log.error('got ValueError on presence file %s: %s, discarding', presence_file, e)
+                pass
 
         minion_keys = _get_keys()
         now = time.time()
@@ -106,7 +109,7 @@ def start(interval=3600, expire=604800):
             del minions[k]
 
         try:
-            with salt.utils.files.fopen(presence_file, 'w') as f:
+            with salt.utils.files.fopen(presence_file, 'wb') as f:
                 salt.utils.msgpack.dump(minions, f)
         except IOError as e:
             log.error('Could not write to presence file %s: %s', presence_file, e)
