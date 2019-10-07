@@ -1582,6 +1582,7 @@ class AESFuncs(object):
             load['id'],
             load.get('saltenv', load.get('env')),
             ext=load.get('ext'),
+            ext_pillars=self.pillars,
             pillar_override=load.get('pillar_override', {}),
             pillarenv=load.get('pillarenv'),
             extra_minion_data=load.get('extra_minion_data'))
