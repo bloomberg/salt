@@ -153,7 +153,7 @@ def lookup_jid(jid,
     if data.get('Function') in ['state.orch', 'state.orchestrate', 'state.sls', 'state.apply']:
         outputter = 'highstate'
 
-    if data.get('Function').startswith('runner.'):
+    if data.get('Function', '').startswith('runner.'):
         ret = data['Results']
         outputter = outputter or 'nested'
     elif isinstance(returns, dict):
@@ -171,6 +171,10 @@ def lookup_jid(jid,
         if missing:
             for minion_id in (x for x in targeted_minions if x not in returns):
                 ret[minion_id] = 'Minion did not return'
+
+    # inflight jobs could still be empty dict
+    if not ret:
+        outputter = 'nested'
 
     return {'outputter': outputter, 'data': ret}
 
