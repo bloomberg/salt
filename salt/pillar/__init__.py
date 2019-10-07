@@ -41,7 +41,7 @@ from salt.ext import six
 log = logging.getLogger(__name__)
 
 
-def get_pillar(opts, grains, minion_id, saltenv=None, ext=None, funcs=None,
+def get_pillar(opts, grains, minion_id, saltenv=None, ext=None, ext_pillars=None, funcs=None,
                pillar_override=None, pillarenv=None, extra_minion_data=None):
     '''
     Return the correct pillar driver based on the file_client option
@@ -58,16 +58,16 @@ def get_pillar(opts, grains, minion_id, saltenv=None, ext=None, funcs=None,
     if opts['pillar_cache']:
         log.debug('get_pillar using pillar cache with ext: %s', ext)
         return PillarCache(opts, grains, minion_id, saltenv, ext=ext, functions=funcs,
-                pillar_override=pillar_override, pillarenv=pillarenv)
+                pillar_override=pillar_override, pillarenv=pillarenv, ext_pillars=ext_pillars)
     return ptype(opts, grains, minion_id, saltenv, ext, functions=funcs,
                  pillar_override=pillar_override, pillarenv=pillarenv,
-                 extra_minion_data=extra_minion_data)
+                 extra_minion_data=extra_minion_data, ext_pillars=ext_pillars)
 
 
 # TODO: migrate everyone to this one!
 def get_async_pillar(opts, grains, minion_id, saltenv=None, ext=None, funcs=None,
                      pillar_override=None, pillarenv=None,
-                     extra_minion_data=None):
+                     extra_minion_data=None, ext_pillars=None):
     '''
     Return the correct pillar driver based on the file_client option
     '''
@@ -80,7 +80,7 @@ def get_async_pillar(opts, grains, minion_id, saltenv=None, ext=None, funcs=None
     }.get(file_client, AsyncPillar)
     return ptype(opts, grains, minion_id, saltenv, ext, functions=funcs,
                  pillar_override=pillar_override, pillarenv=pillarenv,
-                 extra_minion_data=extra_minion_data)
+                 extra_minion_data=extra_minion_data, ext_pillars=ext_pillars)
 
 
 class RemotePillarMixin(object):
@@ -134,7 +134,7 @@ class AsyncRemotePillar(RemotePillarMixin):
     Get the pillar from the master
     '''
     def __init__(self, opts, grains, minion_id, saltenv, ext=None, functions=None,
-                 pillar_override=None, pillarenv=None, extra_minion_data=None):
+                 pillar_override=None, pillarenv=None, extra_minion_data=None, ext_pillars=None):
         self.opts = opts
         self.opts['saltenv'] = saltenv
         self.ext = ext
@@ -205,7 +205,7 @@ class RemotePillar(RemotePillarMixin):
     Get the pillar from the master
     '''
     def __init__(self, opts, grains, minion_id, saltenv, ext=None, functions=None,
-                 pillar_override=None, pillarenv=None, extra_minion_data=None):
+                 pillar_override=None, pillarenv=None, extra_minion_data=None, ext_pillars=None):
         self.opts = opts
         self.opts['saltenv'] = saltenv
         self.ext = ext
@@ -281,7 +281,7 @@ class PillarCache(object):
     '''
     # TODO ABC?
     def __init__(self, opts, grains, minion_id, saltenv, ext=None, functions=None,
-                 pillar_override=None, pillarenv=None, extra_minion_data=None):
+                 pillar_override=None, pillarenv=None, extra_minion_data=None, ext_pillars=None):
         # Yes, we need all of these because we need to route to the Pillar object
         # if we have no cache. This is another refactor target.
 
@@ -293,6 +293,7 @@ class PillarCache(object):
         self.functions = functions
         self.pillar_override = pillar_override
         self.pillarenv = pillarenv
+        self.ext_pillars = ext_pillars
 
         if saltenv is None:
             self.saltenv = 'base'
@@ -325,6 +326,7 @@ class PillarCache(object):
                               self.saltenv,
                               ext=self.ext,
                               functions=self.functions,
+                              ext_pillars=self.ext_pillars,
                               pillarenv=self.pillarenv)
         return fresh_pillar.compile_pillar()
 
@@ -377,7 +379,7 @@ class Pillar(object):
     Read over the pillar top files and render the pillar data
     '''
     def __init__(self, opts, grains, minion_id, saltenv, ext=None, functions=None,
-                 pillar_override=None, pillarenv=None, extra_minion_data=None):
+                 pillar_override=None, pillarenv=None, extra_minion_data=None, ext_pillars=None):
         self.minion_id = minion_id
         self.ext = ext
         if pillarenv is None:
@@ -405,6 +407,7 @@ class Pillar(object):
         self.matcher = salt.minion.Matcher(self.opts, self.functions)
         self.rend = salt.loader.render(self.opts, self.functions)
         ext_pillar_opts = copy.deepcopy(self.opts)
+
         # Keep the incoming opts ID intact, ie, the master id
         if 'id' in opts:
             ext_pillar_opts['id'] = opts['id']
@@ -412,7 +415,12 @@ class Pillar(object):
         if opts.get('pillar_source_merging_strategy'):
             self.merge_strategy = opts['pillar_source_merging_strategy']
 
-        self.ext_pillars = salt.loader.pillars(ext_pillar_opts, self.functions)
+        if ext_pillars is None:
+            self.ext_pillars = salt.loader.pillars(ext_pillar_opts, self.functions)
+        else:
+            self.ext_pillars = ext_pillars
+            self.ext_pillars.inject_globals = {'__opts__': ext_pillar_opts}
+
         self.ignored_pillars = {}
         self.pillar_override = pillar_override or {}
         if not isinstance(self.pillar_override, dict):

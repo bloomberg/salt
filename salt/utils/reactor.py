@@ -73,8 +73,22 @@ class Reactor(salt.utils.process.SignalHandlingMultiprocessingProcess, salt.stat
             log_queue=state['log_queue'])
 
     def __getstate__(self):
-        return {'opts': self.opts,
-                'log_queue': self.log_queue}
+        return {
+            'opts': self.opts,
+            'log_queue': self.log_queue,
+            'log_queue_level': self.log_queue_level
+        }
+
+    def _post_stats(self, stats):
+        '''
+        Fire events with stat info if it's time
+        '''
+        end_time = time.time()
+        if end_time - self.stat_clock > self.opts['master_stats_event_iter']:
+            # Fire the event with the stats and wipe the tracker
+            self.event.fire_event({'time': end_time - self.stat_clock, 'worker': self.name, 'stats': stats}, tagify(self.name, 'stats'))
+            self.stats = collections.defaultdict(lambda: {'mean': 0, 'latency': 0, 'runs': 0})
+            self.stat_clock = end_time
 
     def render_reaction(self, glob_ref, tag, data):
         '''
@@ -280,10 +294,17 @@ class Reactor(salt.utils.process.SignalHandlingMultiprocessingProcess, salt.stat
                     continue
                 chunks = self.reactions(data['tag'], data['data'], reactors)
                 if chunks:
+                    if self.opts['master_stats']:
+                        _data = data['data']
+                        start = time.time()
                     try:
                         self.call_reactions(chunks)
                     except SystemExit:
                         log.warning('Exit ignored by reactor')
+
+                    if self.opts['master_stats']:
+                        stats = salt.utils.event.update_stats(self.stats, start, _data)
+                        self._post_stats(stats)
 
 
 class ReactWrap(object):
