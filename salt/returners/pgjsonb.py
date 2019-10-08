@@ -333,7 +333,7 @@ def _get_serv(ret=None, commit=False):
         PG_SAVE_LOAD_SQL = '''INSERT INTO jids
                               (jid, load)
                               VALUES (%(jid)s, %(load)s)
-                              ON CONFLICT (jid) DO UPDATE SET load=EXCLUDED.load'''
+                              ON CONFLICT (jid) DO NOTHING'''
     try:
         yield cursor
     except psycopg2.DatabaseError as err:

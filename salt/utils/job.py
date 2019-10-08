@@ -101,8 +101,19 @@ def store_job(opts, load, event=None, mminion=None):
     getfstr = '{0}.get_load'.format(job_cache)
     fstr = '{0}.returner'.format(job_cache)
     updateetfstr = '{0}.update_endtime'.format(job_cache)
-    if 'fun' not in load and load.get('return', {}):
-        ret_ = load.get('return', {})
+
+
+    if 'arg' not in load:
+        if 'fun_args' in load:
+            load['arg'] = load['fun_args']
+        elif isinstance(load.get('return', {}), dict) and load.get('return', {}).get('fun_args'):
+            load['arg'] = load['return']['fun_args']
+        else:
+            pass
+
+    ret_ = load.pop('return', {})
+
+    if 'fun' not in load and ret_:
         if 'fun' in ret_:
             load.update({'fun': ret_['fun']})
         if 'user' in ret_:
@@ -129,6 +140,7 @@ def store_job(opts, load, event=None, mminion=None):
         )
 
     try:
+        load['return'] = ret_
         mminion.returners[fstr](load)
     except Exception:
         log.critical(
