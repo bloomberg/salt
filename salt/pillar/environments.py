@@ -38,13 +38,11 @@ Configuring Environemnts Pillar
 # Import futures
 from __future__ import absolute_import, print_function, unicode_literals
 
-import pprint
 import os.path
 import logging
 import os
 import os.path
 from datetime import datetime
-import requests
 
 # Import Salt libs
 import salt.utils.json
@@ -52,6 +50,7 @@ import salt.utils.json
 # Import 3rd-party libs
 from salt.ext import six
 from boltons.setutils import IndexedSet
+import requests
 
 __version__ = '0.0.1'
 
@@ -99,6 +98,25 @@ if HAS_HOSTINFO:
 
     # we want to attempt a sor lookup if a node is missing from flat files
     setattr(hostinfo, '__cache', SorFallbackCache())
+
+    # fix upstream bug that can trigger RecursionError
+    def make_accessor(attr):
+        def accessor(self):
+            _attr = '_HostEntry__{}'.format(attr)
+            value = getattr(self, _attr, None)
+            if not value:
+                updated_host = hostinfo._reload_host_with_jsons(self._HostEntry__name)
+                if getattr(updated_host, _attr, None):
+                    self.update(updated_host)
+
+                    return getattr(self, _attr)
+
+            return value
+
+        return accessor
+
+    for attr in ['cluster', 'parentcluster', 'stage', 'substage']:
+        setattr(hostinfo.HostEntry, attr, make_accessor(attr))
 
 
 def tenancy_groups_set(node):
