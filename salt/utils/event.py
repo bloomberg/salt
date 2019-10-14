@@ -394,6 +394,7 @@ class SaltEvent(object):
             with salt.utils.asynchronous.current_ioloop(self.io_loop):
                 if self.subscriber is None:
                     self.subscriber = salt.transport.ipc.IPCMessageSubscriber(
+                        self.opts,
                         self.puburi,
                         io_loop=self.io_loop
                     )
@@ -406,6 +407,7 @@ class SaltEvent(object):
         else:
             if self.subscriber is None:
                 self.subscriber = salt.transport.ipc.IPCMessageSubscriber(
+                    self.opts,
                     self.puburi,
                     io_loop=self.io_loop
                 )
@@ -444,6 +446,7 @@ class SaltEvent(object):
             with salt.utils.asynchronous.current_ioloop(self.io_loop):
                 if self.pusher is None:
                     self.pusher = salt.transport.ipc.IPCMessageClient(
+                        self.opts,
                         self.pulluri,
                         io_loop=self.io_loop
                     )
@@ -456,6 +459,7 @@ class SaltEvent(object):
         else:
             if self.pusher is None:
                 self.pusher = salt.transport.ipc.IPCMessageClient(
+                    self.opts,
                     self.pulluri,
                     io_loop=self.io_loop
                 )

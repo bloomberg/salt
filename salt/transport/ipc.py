@@ -255,7 +255,7 @@ class IPCClient(object):
     # Create singleton map between two sockets
     instance_map = weakref.WeakKeyDictionary()
 
-    def __new__(cls, socket_path, io_loop=None):
+    def __new__(cls, opts, socket_path, io_loop=None):
         io_loop = io_loop or tornado.ioloop.IOLoop.current()
         if io_loop not in IPCClient.instance_map:
             IPCClient.instance_map[io_loop] = weakref.WeakValueDictionary()
@@ -269,14 +269,14 @@ class IPCClient(object):
             log.debug('Initializing new IPCClient for path: %s', key)
             client = object.__new__(cls)
             # FIXME
-            client.__singleton_init__(io_loop=io_loop, socket_path=socket_path)
+            client.__singleton_init__(opts, io_loop=io_loop, socket_path=socket_path)
             client._instance_key = key
             loop_instance_map[key] = client
         else:
             log.debug('Re-using IPCClient for %s', key)
         return client
 
-    def __singleton_init__(self, socket_path, io_loop=None):
+    def __singleton_init__(self, opts, socket_path, io_loop=None):
         '''
         Create a new IPC client
 
@@ -285,6 +285,7 @@ class IPCClient(object):
         to the server.
 
         '''
+        self.opts = opts
         self.io_loop = io_loop or tornado.ioloop.IOLoop.current()
         self.socket_path = socket_path
         self._closing = False
@@ -305,7 +306,7 @@ class IPCClient(object):
 
         self.unpacker = msgpack.Unpacker(**load_kwargs)
 
-    def __init__(self, socket_path, io_loop=None):
+    def __init__(self, opts, socket_path, io_loop=None):
         # Handled by singleton __new__
         pass
 
@@ -647,9 +648,9 @@ class IPCMessageSubscriber(IPCClient):
     # Wait for some data
     package = ipc_subscriber.read_sync()
     '''
-    def __singleton_init__(self, socket_path, io_loop=None):
+    def __singleton_init__(self, opts, socket_path, io_loop=None):
         super(IPCMessageSubscriber, self).__singleton_init__(
-            socket_path, io_loop=io_loop)
+            opts, socket_path, io_loop=io_loop)
         self._read_sync_future = None
         self._read_stream_future = None
         self._sync_ioloop_running = False
