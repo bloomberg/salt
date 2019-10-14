@@ -43,9 +43,9 @@ class OutputUnifier(object):
         :return:
         '''
         if not isinstance(result, dict):
-            err_msg = 'Malformed state return. Data must be a dictionary type.'
-        elif not isinstance(result.get('changes'), dict):
-            err_msg = "'Changes' should be a dictionary."
+            err_msg = 'Malformed state return. Data must be a dictionary type, got %s' % result
+        elif not isinstance(result.get('changes', None), dict):
+            err_msg = "'Changes' should be a dictionary, got %s" % result.get('changes')
         else:
             missing = []
             for val in ['name', 'result', 'changes', 'comment']:

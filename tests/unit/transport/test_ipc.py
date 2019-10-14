@@ -87,6 +87,7 @@ class IPCMessageClient(BaseIPCReqCase):
 
     def _get_channel(self):
         channel = salt.transport.ipc.IPCMessageClient(
+            salt.config.minion_config(None),
             socket_path=self.socket_path,
             io_loop=self.io_loop,
         )

@@ -144,20 +144,26 @@ def output(data, **kwargs):  # pylint: disable=unused-argument
     # in the "data" key, as the orchestrate runner does. See Issue #31330,
     # pull request #27838, and pull request #27175 for more information.
     # account for envelope data if being passed lookup_jid ret
-    if 'return' in data:
+    if isinstance(data, dict) and 'return' in data:
         data = data['return']
-    if 'data' in data:
+
+    if isinstance(data, dict) and 'data' in data:
         data = data['data']
 
     # account for envelope data if being passed lookup_jid ret
     if isinstance(data, dict) and len(data.keys()) == 1:
         _data = next(iter(data.values()))
-        if 'jid' in _data and 'fun' in _data:
-            data = _data.get('return', {}).get('data', data)
+
+        if isinstance(_data, dict):
+            if 'jid' in _data and 'fun' in _data:
+                data = _data.get('return', {}).get('data', data)
 
     # output() is recursive, if we aren't passed a dict just return it
     if isinstance(data, int) or isinstance(data, six.string_types):
         return data
+
+    if data is None:
+        return 'None'
 
     # Discard retcode in dictionary as present in orchestrate data
     local_masters = [key for key in data.keys() if key.endswith('_master')]
