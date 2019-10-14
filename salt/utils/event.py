@@ -415,7 +415,7 @@ class SaltEvent(object):
             self.cpub = True
         return self.cpub
 
-    def close_pub(self):
+    def close_pub(self, discard_events=True):
         '''
         Close the publish connection (if established)
         '''
@@ -424,7 +424,12 @@ class SaltEvent(object):
 
         self.subscriber.close()
         self.subscriber = None
-        self.pending_events = []
+        if discard_events:
+            self.pending_events = []
+        else:
+            if self.pending_events:
+                log.error('close_pub() called with pending events %s', self.pending_events)
+
         self.cpub = False
 
     def connect_pull(self, timeout=1):
@@ -668,7 +673,7 @@ class SaltEvent(object):
                             ret = self._get_event(wait, tag, match_func, no_block)
                             break
                         except tornado.iostream.StreamClosedError:
-                            self.close_pub()
+                            self.close_pub(discard_events=False)
                             self.connect_pub(timeout=wait)
                             continue
                     self.raise_errors = raise_errors

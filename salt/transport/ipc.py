@@ -180,6 +180,9 @@ class IPCServer(object):
                 encoding = 'utf-8'
             load_kwargs['encoding'] = encoding
 
+        # we use a max buffer of 100 max size events. this is 100mb on a default install
+        load_kwargs['max_buffer_size'] = self.opts['max_event_size'] * 10
+
         unpacker = msgpack.Unpacker(**load_kwargs)
         while not stream.closed():
             try:
@@ -296,6 +299,9 @@ class IPCClient(object):
             else:
                 encoding = 'utf-8'
             load_kwargs['encoding'] = encoding
+
+        # we use a max buffer of 100 max size events. this is 100mb on a default install
+        load_kwargs['max_buffer_size'] = self.opts['max_event_size'] * 10
 
         self.unpacker = msgpack.Unpacker(**load_kwargs)
 
