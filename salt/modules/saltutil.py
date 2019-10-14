@@ -1608,6 +1608,8 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
     masterless = __opts__['__role'] == 'minion' and \
              __opts__['file_client'] == 'local'
 
+    local = __opts__['local']
+
     master_key = salt.utils.master.get_master_key('root', opts)
     low = {'arg': arg, 'kwarg': kwarg, 'fun': name, 'key': master_key}
     if eauth:
@@ -1618,12 +1620,16 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
         log.debug('RequestContext.current auth_check: %s', RequestContext.current['auth_check'])
         low['auth_check'] = RequestContext.current['auth_check']
 
-    if masterless:
-        return rclient.cmd(name,
-                           arg=arg,
-                           kwarg=kwarg,
-                           print_event=False,
-                           full_return=full_return)
+    if masterless or local:
+        ret = rclient.cmd(name, arg=arg, kwarg=kwarg, print_event=False, full_return=full_return)
+        # we have to cheat and fake out the envelope cmd_sync/cmd_async provide
+        if isinstance(ret, dict) and 'jid' in ret:
+            jid = ret['jid']
+            ret = {'data': ret, 'jid': 'salt/run/{}'.format(jid)}
+        else:
+            ret = {'data': ret}
+
+        return ret
     elif asynchronous:
         return rclient.cmd_async(low)
     else:
