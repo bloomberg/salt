@@ -1729,7 +1729,7 @@ def managed(name,
             replace=True,
             defaults=None,
             backup='',
-            show_changes=True,
+            show_changes=None,
             create=True,
             contents=None,
             tmp_ext='',
@@ -2096,6 +2096,11 @@ def managed(name,
             be used instead. However, this will not work for binary files in
             Salt releases before 2015.8.4.
 
+        .. note::
+            contents_pillar implicitly sets show_changes: False to protect against
+            leaking changes to the minion log file. If you want this behavior
+            setting it explicitly will enable it.
+
     contents_grains
         .. versionadded:: 2014.7.0
 
@@ -2377,6 +2382,9 @@ def managed(name,
                     'Pillar {0} does not exist'.format(contents_pillar)
                 )
 
+        if show_changes is None:
+            show_changes = False
+
     elif contents_grains is not None:
         if isinstance(contents_grains, list):
             list_contents = []
@@ -2455,6 +2463,11 @@ def managed(name,
                 else:
                     ret['comment'] = 'Error while applying template on contents'
                 return ret
+
+    # show_changes may be set to false above if contents_pillar is used
+    # if not, default to True
+    if show_changes is None:
+        show_changes = True
 
     user = _test_owner(kwargs, user=user)
     if salt.utils.platform.is_windows():
