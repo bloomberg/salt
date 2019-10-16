@@ -174,6 +174,9 @@ def lookup_jid(jid,
 
     # inflight jobs could still be empty dict
     if not ret:
+        return ret
+
+    if not outputter:
         outputter = 'nested'
 
     return {'outputter': outputter, 'data': ret}
