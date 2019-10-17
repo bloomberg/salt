@@ -953,7 +953,7 @@ class CkMinions(object):
             # then pillar globbing or PCRE is being used, and we have a
             # problem
             if mismatch:
-                return False
+                return (False, False)
         # compound commands will come in a list so treat everything as a list
         if not isinstance(funs, list):
             funs = [funs]
@@ -961,17 +961,29 @@ class CkMinions(object):
         try:
             for num, fun in enumerate(funs):
                 if whitelist and fun in whitelist:
-                    return True
+                    return (True, False)
                 for ind in auth_list:
                     if isinstance(ind, six.string_types):
                         # Allowed for all minions
+                        recursive = False
+                        if ind.endswith(':recursive'):
+                            ind = ind[0:-10]
+                            recursive = True
+
                         if self.match_check(ind, fun):
-                            return True
+                            return (True, recursive)
                     elif isinstance(ind, dict):
                         if len(ind) != 1:
                             # Invalid argument
                             continue
                         valid = next(six.iterkeys(ind))
+                        fun_spec = ind[valid]
+
+                        recursive = False
+                        if valid.endswith(':recursive'):
+                            valid = valid[0:-10]
+                            recursive = True
+
                         # Check if minions are allowed
                         if self.validate_tgt(
                             valid,
@@ -986,12 +998,12 @@ class CkMinions(object):
                                 del fun_args[-1]
                             else:
                                 fun_kwargs = None
-                            log.debug("auth_check: ind: %s fun: %s fun_args: %s fun_kwargs: %s", ind[valid], fun, fun_args, fun_kwargs)
-                            if self.__fun_check(ind[valid], fun, fun_args, fun_kwargs):
-                                return True
+                            log.debug("auth_check: ind: %s fun: %s fun_args: %s fun_kwargs: %s", fun_spec, fun, fun_args, fun_kwargs)
+                            if self.__fun_check(fun_spec, fun, fun_args, fun_kwargs):
+                                return (True, recursive)
         except TypeError:
-            return False
-        return False
+            return (False, False)
+        return (False, False)
 
     def fill_auth_list_from_groups(self, auth_provider, user_groups, auth_list):
         '''
@@ -1070,15 +1082,15 @@ class CkMinions(object):
         Check special API permissions
         '''
         if not auth_list:
-            return False
+            return (False, False)
         if form != 'cloud':
             comps = fun.split('.')
             if len(comps) != 2:
                 # Hint at a syntax error when command is passed improperly,
                 # rather than returning an authentication error of some kind.
                 # See Issue #21969 for more information.
-                return {'error': {'name': 'SaltInvocationError',
-                                  'message': 'A command invocation error occurred: Check syntax.'}}
+                return ({'error': {'name': 'SaltInvocationError',
+                                  'message': 'A command invocation error occurred: Check syntax.'}}, False)
             mod_name = comps[0]
             fun_name = comps[1]
         else:
@@ -1086,21 +1098,33 @@ class CkMinions(object):
 
         for ind in auth_list:
             if isinstance(ind, six.string_types):
+                recursive = False
+                if ind.endswith(':recursive'):
+                    ind = ind[-10]
+                    recursive = True
+
                 if ind[0] == '@':
                     if ind[1:] == mod_name or ind[1:] == form or ind == '@{0}s'.format(form):
-                        return True
+                        return (True, recursive)
             elif isinstance(ind, dict):
                 if len(ind) != 1:
                     continue
                 valid = next(six.iterkeys(ind))
+                fun_spec = ind[valid]
+
+                recursive = False
+                if valid.endswith(':recursive'):
+                    valid = valid[0:-10]
+                    recursive = True
+
                 if valid[0] == '@':
                     if valid[1:] == mod_name:
-                        if self.__fun_check(ind[valid], fun_name, args.get('arg'), args.get('kwarg')):
-                            return True
+                        if self.__fun_check(fun_spec, fun_name, args.get('arg'), args.get('kwarg')):
+                            return (True, recursive)
                     if valid[1:] == form or valid == '@{0}s'.format(form):
-                        if self.__fun_check(ind[valid], fun, args.get('arg'), args.get('kwarg')):
-                            return True
-        return False
+                        if self.__fun_check(fun_spec, fun, args.get('arg'), args.get('kwarg')):
+                            return (True, recursive)
+        return (False, False)
 
     def __fun_check(self, valid, fun, args=None, kwargs=None):
         '''
