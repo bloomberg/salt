@@ -278,11 +278,20 @@ def maintenance():
     if any maintenance is required, do it here
     for pg, this means refresh the materialized view
     '''
-    try:
-        with _exec_pg(autocommit=True) as cur:
-            return cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"')
-    except salt.exceptions.SaltMasterError as err:
-        raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
+    lock_sql = 'SELECT pg_try_advisory_xact_lock(12953546);'
+    xact_sql = 'REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"; SELECT pg_sleep(30); COMMIT;'
+    with _exec_pg() as cur:
+        # start the transaction
+        cur.execute('BEGIN;')
+        # try to obtain exclusive transaction level advisory lock if available
+        if cur.execute(lock_sql):
+            try:
+                # refresh view and sleep 30s
+                return cur.execute(xact_sql)
+            except salt.exceptions.SaltMasterError as err:
+                raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
+
+        raise salt.exceptions.SaltCacheError('Could not secure an exclusive transaction level advisory lock for postgress cache')
 
 def query(sql, bind=None, autocommit=True):
     '''
