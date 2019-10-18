@@ -1961,18 +1961,21 @@ class ClearFuncs(object):
         username = auth_check.get('username')
 
         if auth_type != 'user':
-            runner_check = self.ckminions.runner_check(
+            (permitted, recursive) = self.ckminions.runner_check(
                 auth_check.get('auth_list', []),
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            if not runner_check:
+            auth_check['recursive'] = recursive
+            if not permitted:
+                log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
                                    'message': 'Authentication failure of type "{0}" occurred for '
                                              'user "{1}".'.format(auth_type, username)}}
-            elif isinstance(runner_check, dict) and 'error' in runner_check:
+
+            elif isinstance(permitted, dict) and 'error' in permitted:
                 # A dictionary with an error name/message was handled by ckminions.runner_check
-                return runner_check
+                return permitted
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
@@ -2033,18 +2036,20 @@ class ClearFuncs(object):
         # Authorize
         username = auth_check.get('username')
         if auth_type != 'user':
-            wheel_check = self.ckminions.wheel_check(
+            (permitted, recursive) = self.ckminions.wheel_check(
                 auth_check.get('auth_list', []),
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            if not wheel_check:
+            auth_check['recursive'] = recursive
+            if not permitted:
+                log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
                                   'message': 'Authentication failure of type "{0}" occurred for '
                                              'user "{1}".'.format(auth_type, username)}}
-            elif isinstance(wheel_check, dict) and 'error' in wheel_check:
+            elif isinstance(permitted, dict) and 'error' in permitted:
                 # A dictionary with an error name/message was handled by ckminions.wheel_check
-                return wheel_check
+                return permitted
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
@@ -2164,13 +2169,14 @@ class ClearFuncs(object):
         if auth_check.get('error'):
             # Authentication error occurred: do not continue.
             log.warning(err_msg)
+            log.warning('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
             return {'error': {'name': 'AuthenticationError',
                               'message': err_msg}}
 
         # All Token, Eauth, and non-root users must pass the authorization check
         if auth_type != 'user' or (auth_type == 'user' and auth_list):
             # Authorize the request
-            authorized = self.ckminions.auth_check(
+            (permitted, recursive) = self.ckminions.auth_check(
                 auth_list,
                 clear_load['fun'],
                 clear_load['arg'],
@@ -2180,12 +2186,14 @@ class ClearFuncs(object):
                 # always accept find_job
                 whitelist=['saltutil.find_job'],
             )
+            auth_check['recursive'] = recursive
 
-            if not authorized:
+            if not permitted:
                 # Authorization error occurred. Do not continue.
                 if auth_type == 'eauth' and not auth_list and 'username' in extra and 'eauth' in extra:
                     log.debug('Auth configuration for eauth "%s" and user "%s" is empty', extra['eauth'], extra['username'])
                 log.warning(err_msg)
+                log.warning('permission failure, current auth_list: %s', auth_list)
                 return {'error': {'name': 'AuthorizationError',
                                   'message': err_msg}}
 

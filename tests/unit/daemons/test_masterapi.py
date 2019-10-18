@@ -511,7 +511,8 @@ class LocalFuncsTestCase(TestCase):
                 patch('salt.acl.PublisherACL.cmd_is_blacklisted', MagicMock(return_value=False)), \
                 patch('salt.auth.LoadAuth.authenticate_eauth', MagicMock(return_value=True)), \
                 patch('salt.auth.LoadAuth.get_auth_list', MagicMock(return_value=[])):
-            self.assertEqual(mock_ret, self.local_funcs.publish(load))
+            ret = self.local_funcs.publish(load)
+            self.assertEqual(mock_ret, ret)
 
     def test_publish_user_not_authenticated(self):
         '''
@@ -552,8 +553,9 @@ class LocalFuncsTestCase(TestCase):
                 patch('salt.acl.PublisherACL.cmd_is_blacklisted', MagicMock(return_value=False)), \
                 patch('salt.auth.LoadAuth.authenticate_key', MagicMock(return_value='fake-user-key')), \
                 patch('salt.utils.master.get_values_of_matching_keys', MagicMock(return_value=['test'])), \
-                patch('salt.utils.minions.CkMinions.auth_check', MagicMock(return_value=False)):
-            self.assertEqual(mock_ret, self.local_funcs.publish(load))
+                patch('salt.utils.minions.CkMinions.auth_check', MagicMock(return_value=(False, False))):
+            ret = self.local_funcs.publish(load)
+            self.assertEqual(mock_ret, ret)
 
 
 class FakeCache(object):

@@ -1828,6 +1828,9 @@ class LocalClient(object):
             payload_kwargs['key'] = self.key
             payload = channel.send(payload_kwargs)
 
+        if isinstance(payload, six.string_types):
+            raise tornado.gen.Return(payload)
+
         error = payload.pop('error', None)
         if error is not None:
             if isinstance(error, dict):
@@ -1946,6 +1949,9 @@ class LocalClient(object):
             self.key = key
             payload_kwargs['key'] = self.key
             payload = yield channel.send(payload_kwargs)
+
+        if isinstance(payload, six.string_types):
+            raise tornado.gen.Return(payload)
 
         error = payload.pop('error', None)
         if error is not None:

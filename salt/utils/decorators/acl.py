@@ -55,6 +55,11 @@ class Authorize(object):
                 log.trace('auth_type of user, permitting')
                 return f(*args, **kwargs)
 
+            # a user auth type is implicitly root as such is not held to a auth_list
+            if auth_check.get('recursive'):
+                log.trace('auth_check is recursive, permitting')
+                return f(*args, **kwargs)
+
             if not self.ckminions:
                 # late import to avoid circular dependencies
                 import salt.utils.minions
@@ -66,7 +71,7 @@ class Authorize(object):
                 return f(*args, **kwargs)
 
             if self.tag == 'render':
-                render_check = self.ckminions.render_check(auth_list, self.item)
+                (render_check, recursive) = self.ckminions.render_check(auth_list, self.item)
 
                 if not render_check or isinstance(render_check, dict) and 'error' in render_check:
                     log.error("current auth_check profile: %s", auth_check)
@@ -77,7 +82,7 @@ class Authorize(object):
 
             # borrowed from salt.utils.decorators.Depends
             if self.tag == 'runners':
-                runner_check = self.ckminions.runner_check(
+                (runner_check, recursive) = self.ckminions.runner_check(
                     auth_list,
                     self.item,
                     {'arg': args, 'kwargs': kwargs},
@@ -102,7 +107,7 @@ class Authorize(object):
                     _id = self.opts['id'][0:-7]
                 else:
                     _id = self.opts['id']
-                minion_check = self.ckminions.auth_check(
+                (minion_check, recursive) = self.ckminions.auth_check(
                     auth_list,
                     self.item,
                     [args, kwargs],

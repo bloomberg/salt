@@ -134,6 +134,7 @@ def state(name,
         eauth_opts=None,
         module_executors=None,
         executor_opts=None,
+        force=None,
         **kwargs):
     '''
     Invoke a state run on a given target
@@ -240,6 +241,11 @@ def state(name,
 
     failhard
         pass failhard down to the executing state
+
+        .. versionadded:: develop
+
+    force
+        pass force down to the executing state
 
         .. versionadded:: develop
 
@@ -355,6 +361,9 @@ def state(name,
 
     if failhard is True or __opts__.get('failhard'):
         cmd_kw['failhard'] = True
+
+    if force is not None:
+        cmd_kw['force'] = force
 
     if eauth:
         cmd_kw['eauth'] = eauth
