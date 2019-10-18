@@ -14,8 +14,6 @@ import logging
 import types
 from copy import deepcopy
 
-import pprint;
-
 # pylint: disable=import-error,no-name-in-module
 from salt.ext import six
 from salt.ext.six.moves.urllib.parse import urlparse
