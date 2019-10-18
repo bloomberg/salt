@@ -531,7 +531,7 @@ class AuthACLTestCase(ModuleCase):
     A class to check various aspects of the publisher ACL system
     '''
     def setUp(self):
-        self.auth_check_mock = MagicMock(return_value=True)
+        self.auth_check_mock = MagicMock(return_value=(True, True))
         opts = self.get_temp_config('master')
 
         patches = (

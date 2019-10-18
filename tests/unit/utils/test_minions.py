@@ -53,51 +53,51 @@ class CkMinionsTestCase(TestCase):
     def test_spec_check(self):
         # Test spec-only rule
         auth_list = ['@runner']
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'testarg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'testarg', {}, 'runner')
         mock_ret = {'error': {'name': 'SaltInvocationError',
                               'message': 'A command invocation error occurred: Check syntax.'}}
         self.assertDictEqual(mock_ret, ret)
 
         # Test spec in plural form
         auth_list = ['@runners']
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
         self.assertFalse(ret)
 
         # Test spec with module.function restriction
         auth_list = [{'@runner': 'test.arg'}]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'wheel')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'tes.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'tes.arg', {}, 'runner')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.ar', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.ar', {}, 'runner')
         self.assertFalse(ret)
 
         # Test function name is a regex
         auth_list = [{'@runner': 'test.arg.*some'}]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.argsome', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.argsome', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.arg_aaa_some', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg_aaa_some', {}, 'runner')
         self.assertTrue(ret)
 
         # Test a list of funcs
         auth_list = [{'@runner': ['test.arg', 'jobs.active']}]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.active', {}, 'runner')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.arg', {}, 'runner')
         self.assertFalse(ret)
 
         # Test args-kwargs rules
@@ -112,59 +112,59 @@ class CkMinionsTestCase(TestCase):
                         }
                     }
                 }]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = {
                 'arg': ['1', '2', '3'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd', 'zzz': 'zzz'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddc'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '3'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = {
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '2'],
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
 
         # Test kwargs only
@@ -178,13 +178,13 @@ class CkMinionsTestCase(TestCase):
                         }
                     }
                 }]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
 
         # Test args only
@@ -195,13 +195,13 @@ class CkMinionsTestCase(TestCase):
                         }
                     }
                 }]
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertFalse(ret)
         args = {
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
 
         # Test list of args
@@ -221,44 +221,44 @@ class CkMinionsTestCase(TestCase):
                 'arg': ['1', '2'],
                 'kwarg': {'aaa': 'bbb', 'ccc': 'ddd'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = {
                 'arg': ['2', '3'],
                 'kwarg': {'aaa': 'aaa', 'ccc': 'ccc'}
                 }
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
 
         # Test @module form
         auth_list = ['@jobs']
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'wheel')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'wheel')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'test.arg', {}, 'runner')
         self.assertFalse(ret)
-        ret = self.ckminions.spec_check(auth_list, 'job.arg', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'job.arg', {}, 'runner')
         self.assertFalse(ret)
 
         # Test @module: function
         auth_list = [{'@jobs': 'active'}]
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'wheel')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'wheel')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active_jobs', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active_jobs', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.activ', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.activ', {}, 'runner')
         self.assertFalse(ret)
 
         # Test @module: [functions]
         auth_list = [{'@jobs': ['active', 'li']}]
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.list_jobs', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.list_jobs', {}, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.last_run', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.last_run', {}, 'runner')
         self.assertFalse(ret)
 
         # Test @module: function with args
@@ -266,38 +266,38 @@ class CkMinionsTestCase(TestCase):
                                            'kwargs': {'a': 'b', 'c': 'd'}}}}]
         args = {'arg': ['1', '2'],
                 'kwarg': {'a': 'b', 'c': 'd'}}
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', args, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', args, 'runner')
         self.assertTrue(ret)
-        ret = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
+        (ret, _) = self.ckminions.spec_check(auth_list, 'jobs.active', {}, 'runner')
         self.assertFalse(ret)
 
     @patch('salt.utils.minions.CkMinions._pki_minions', MagicMock(return_value=['alpha', 'beta', 'gamma']))
     def test_auth_check(self):
         # Test function-only rule
         auth_list = ['test.ping']
-        ret = self.ckminions.auth_check(auth_list, 'test.ping', None, 'alpha')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.ping', None, 'alpha')
         self.assertTrue(ret)
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
+        (ret ,_) = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
         self.assertFalse(ret)
 
         # Test minion and function
         auth_list = [{'alpha': 'test.ping'}]
-        ret = self.ckminions.auth_check(auth_list, 'test.ping', None, 'alpha')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.ping', None, 'alpha')
         self.assertTrue(ret)
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
         self.assertFalse(ret)
-        ret = self.ckminions.auth_check(auth_list, 'test.ping', None, 'beta')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.ping', None, 'beta')
         self.assertFalse(ret)
 
         # Test function list
         auth_list = [{'*': ['test.*', 'saltutil.cmd']}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', None, 'alpha')
         self.assertTrue(ret)
-        ret = self.ckminions.auth_check(auth_list, 'test.ping', None, 'beta')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.ping', None, 'beta')
         self.assertTrue(ret)
-        ret = self.ckminions.auth_check(auth_list, 'saltutil.cmd', None, 'gamma')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'saltutil.cmd', None, 'gamma')
         self.assertTrue(ret)
-        ret = self.ckminions.auth_check(auth_list, 'saltutil.running', None, 'gamma')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'saltutil.running', None, 'gamma')
         self.assertFalse(ret)
 
         # Test an args and kwargs rule
@@ -312,27 +312,27 @@ class CkMinionsTestCase(TestCase):
                         }
                     }
                 }]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', None, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', None, 'runner')
         self.assertFalse(ret)
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', [], 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', [], 'runner')
         self.assertFalse(ret)
         args = ['1', '2', {'aaa': 'bbb', 'ccc': 'ddd', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = ['1', '2', '3', {'aaa': 'bbb', 'ccc': 'ddd', 'eee': 'fff', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = ['1', {'aaa': 'bbb', 'ccc': 'ddd', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = ['1', '2', {'aaa': 'bbb', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = ['1', '3', {'aaa': 'bbb', 'ccc': 'ddd', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
         args = ['1', '2', {'aaa': 'bbb', 'ccc': 'fff', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertFalse(ret)
 
         # Test kwargs only rule
@@ -347,10 +347,10 @@ class CkMinionsTestCase(TestCase):
                     }
                 }]
         args = ['1', '2', {'aaa': 'bbb', 'ccc': 'ddd', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = [{'aaa': 'bbb', 'ccc': 'ddd', 'eee': 'fff', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
 
         # Test args only rule
@@ -362,10 +362,10 @@ class CkMinionsTestCase(TestCase):
                     }
                 }]
         args = ['1', '2', {'aaa': 'bbb', 'ccc': 'ddd', '__kwarg__': True}]
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
         args = ['1', '2']
-        ret = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
+        (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
 
 

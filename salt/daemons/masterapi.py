@@ -504,13 +504,14 @@ class RemoteFuncs(object):
             for arg in load['arg']:
                 arg_.append(arg.split())
             load['arg'] = arg_
-        return self.ckminions.auth_check(
+        (permitted, _ ) = self.ckminions.auth_check(
                 perms,
                 load['fun'],
                 load['arg'],
                 load['tgt'],
                 load.get('tgt_type', 'glob'),
                 publish_validate=True)
+        return permitted
 
     def _master_opts(self, load):
         '''
@@ -1116,7 +1117,7 @@ class LocalFuncs(object):
             return {'error': error}
 
         # Authorize
-        runner_check = self.ckminions.runner_check(
+        (runner_check, _) = self.ckminions.runner_check(
             auth_check.get('auth_list', []),
             load['fun'],
             load['kwarg']
@@ -1166,7 +1167,7 @@ class LocalFuncs(object):
         # Authorize
         username = auth_check.get('username')
         if auth_type != 'user':
-            wheel_check = self.ckminions.wheel_check(
+            (wheel_check, _) = self.ckminions.wheel_check(
                 auth_check.get('auth_list', []),
                 load['fun'],
                 load['kwarg']
@@ -1275,7 +1276,7 @@ class LocalFuncs(object):
         # All Token, Eauth, and non-root users must pass the authorization check
         if auth_type != 'user' or (auth_type == 'user' and auth_list):
             # Authorize the request
-            authorized = self.ckminions.auth_check(
+            (authorized, _) = self.ckminions.auth_check(
                 auth_list,
                 load['fun'],
                 load['arg'],
