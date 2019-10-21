@@ -344,6 +344,9 @@ def state(name,
     if exclude is not None:
         cmd_kw['kwarg']['exclude'] = exclude
 
+    if force is not None:
+        cmd_kw['kwarg']['force'] = force
+
     cmd_kw['kwarg']['queue'] = queue
 
     if isinstance(concurrent, bool):
@@ -361,9 +364,6 @@ def state(name,
 
     if failhard is True or __opts__.get('failhard'):
         cmd_kw['failhard'] = True
-
-    if force is not None:
-        cmd_kw['force'] = force
 
     if eauth:
         cmd_kw['eauth'] = eauth

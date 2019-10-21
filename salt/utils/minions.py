@@ -1096,26 +1096,31 @@ class CkMinions(object):
         else:
             fun_name = mod_name = fun
 
-        for ind in auth_list:
-            if isinstance(ind, six.string_types):
-                recursive = False
-                if ind.endswith(':recursive'):
-                    ind = ind[-10]
+        for elem in auth_list:
+            if isinstance(elem, six.string_types):
+                if elem.endswith(':recursive'):
+                    ind = elem[0:-10]
                     recursive = True
+                else:
+                    ind = elem
+                    recursive = False
 
                 if ind[0] == '@':
                     if ind[1:] == mod_name or ind[1:] == form or ind == '@{0}s'.format(form):
                         return (True, recursive)
-            elif isinstance(ind, dict):
-                if len(ind) != 1:
+            elif isinstance(elem, dict):
+                if len(elem) != 1:
                     continue
-                valid = next(six.iterkeys(ind))
-                fun_spec = ind[valid]
+                valid = next(six.iterkeys(elem))
+                fun_spec = elem[valid]
 
                 recursive = False
                 if valid.endswith(':recursive'):
                     valid = valid[0:-10]
                     recursive = True
+                else:
+                    vaid = elem
+                    recursive = False
 
                 if valid[0] == '@':
                     if valid[1:] == mod_name:
