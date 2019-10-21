@@ -283,14 +283,15 @@ def maintenance():
         lock_id = int(lock_id)
     with _exec_pg(autocommit=False) as cur:
         # try to obtain exclusive transaction level advisory lock if available
-        ret_lock = cur.execute('SELECT pg_try_advisory_xact_lock({});'.format(lock_id))
-        log.info('Result of pg_try_advisory_xact_lock {0}: {1}'.format(lock_id, ret_lock))
-        if ret_lock:
+        cur.execute('SELECT pg_try_advisory_xact_lock({})'.format(lock_id)):
+        ret_lock = cur.fetchone()
+        if ret_lock and ret_lock[0]:
             try:
                 # refresh view and sleep 30s
-                cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view";')
+                cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"')
+                log.info('cache_grains_ipv4_view has been concurrently refreshed. Will sleep for 30s.')
                 time.sleep(30)
-                return cur.commit()
+                return True
             except salt.exceptions.SaltMasterError as err:
                 raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
 
