@@ -281,20 +281,21 @@ def maintenance():
     lock_id = __opts__.get('cache.pgjsonb.lock_id', 12953546)
     if not isinstance(lock_id, six.integer_types):
         lock_id = int(lock_id)
-    lock_sql = 'SELECT pg_try_advisory_xact_lock({});'.format(lock_id)
-    xact_sql = 'REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"; SELECT pg_sleep(30); COMMIT;'
     with _exec_pg(autocommit=False) as cur:
-        # start the transaction
-        cur.execute('BEGIN;')
         # try to obtain exclusive transaction level advisory lock if available
-        if cur.execute(lock_sql):
+        ret_lock = cur.execute('SELECT pg_try_advisory_xact_lock({});'.format(lock_id))
+        log.info('Result of pg_try_advisory_xact_lock {0}: {1}'.format(lock_id, ret_lock))
+        if ret_lock:
             try:
                 # refresh view and sleep 30s
-                return cur.execute(xact_sql)
+                cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view";')
+                time.sleep(30)
+                return cur.commit()
             except salt.exceptions.SaltMasterError as err:
                 raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
 
         log.info('Could not secure an exclusive transaction level advisory lock for postgress cache. Materialized View not refreshed')
+        return True
 
 def query(sql, bind=None, autocommit=True):
     '''
