@@ -282,11 +282,11 @@ def maintenance():
     if not isinstance(lock_id, six.integer_types):
         lock_id = int(lock_id)
     with _exec_pg(autocommit=False) as cur:
-        # try to obtain exclusive transaction level advisory lock if available
-        cur.execute('SELECT pg_try_advisory_xact_lock({})'.format(lock_id)):
-        ret_lock = cur.fetchone()
-        if ret_lock and ret_lock[0]:
-            try:
+        try:
+            # try to obtain exclusive transaction level advisory lock if available
+            cur.execute('SELECT pg_try_advisory_xact_lock({})'.format(lock_id))
+            ret_lock = cur.fetchone()
+            if ret_lock and ret_lock[0]:
                 # refresh view and sleep 30s
                 cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"')
                 log.info('cache_grains_ipv4_view has been concurrently refreshed. Will sleep for 30s.')
