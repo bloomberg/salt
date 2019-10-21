@@ -6,7 +6,7 @@ msgpack==0.6.1
 psutil==5.6.1
 pycryptodomex==3.8.1
 pythonnet==2.4.0
-pywin32==225
+pywin32==224
 PyYAML==5.1.2
 pyzmq==18.0.1
 requests==2.21.0
