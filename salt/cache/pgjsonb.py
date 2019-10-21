@@ -292,8 +292,8 @@ def maintenance():
                 log.info('cache_grains_ipv4_view has been concurrently refreshed. Will sleep for 30s.')
                 time.sleep(30)
                 return True
-            except salt.exceptions.SaltMasterError as err:
-                raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
+        except salt.exceptions.SaltMasterError as err:
+            raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
 
         log.debug('Could not secure an exclusive transaction level advisory lock for postgres cache. Materialized View not refreshed')
         return False
