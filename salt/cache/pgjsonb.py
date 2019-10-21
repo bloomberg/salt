@@ -289,13 +289,13 @@ def maintenance():
             if ret_lock and ret_lock[0]:
                 # refresh view and sleep 30s
                 cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY "cache_grains_ipv4_view"')
-                log.info('cache_grains_ipv4_view has been concurrently refreshed. Will sleep for 30s.')
+                log.debug('cache_grains_ipv4_view has been refreshed')
                 time.sleep(30)
                 return True
         except salt.exceptions.SaltMasterError as err:
             raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
 
-        log.debug('Could not secure an exclusive transaction level advisory lock for postgres cache. Materialized View not refreshed')
+        log.debug('Could not acquire advisory lock to refresh materialized view. no-op')
         return False
 
 def query(sql, bind=None, autocommit=True):
