@@ -295,8 +295,8 @@ def maintenance():
             except salt.exceptions.SaltMasterError as err:
                 raise salt.exceptions.SaltCacheError('Could not execute cache with postgres cache: {}'.format(err))
 
-        log.info('Could not secure an exclusive transaction level advisory lock for postgress cache. Materialized View not refreshed')
-        return True
+        log.debug('Could not secure an exclusive transaction level advisory lock for postgres cache. Materialized View not refreshed')
+        return False
 
 def query(sql, bind=None, autocommit=True):
     '''
