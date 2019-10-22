@@ -33,14 +33,25 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-def master():
+def master(count=False):
     '''
     Return the actively executing runners for the master
+
+    count : False
+        if true, return a len() of the job count, not the job details
+
     CLI Example:
+
     .. code-block:: bash
         salt-run jobs.master
+
     '''
-    return salt.utils.master.get_running_jobs(__opts__)
+    jobs = salt.utils.master.get_running_jobs(__opts__)
+
+    if count:
+        return len(jobs)
+    else:
+        return jobs
 
 
 def active(display_progress=False):
