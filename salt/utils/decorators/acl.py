@@ -56,7 +56,7 @@ class Authorize(object):
                 return f(*args, **kwargs)
 
             # a user auth type is implicitly root as such is not held to a auth_list
-            if auth_check.get('recursive'):
+            if RequestContext.current.get('recursive'):
                 log.trace('auth_check is recursive, permitting')
                 return f(*args, **kwargs)
 

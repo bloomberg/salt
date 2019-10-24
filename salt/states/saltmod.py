@@ -858,11 +858,12 @@ def runner(name, **kwargs):
         out['return'] = out.copy()
         out['success'] = 'jid' in out and 'tag' in out
 
-    runner_return = out.get('data', {}).get('return')
+    runner_return = out.get('return')
+
     if isinstance(runner_return, dict) and ('Error' in runner_return or 'error' in runner_return):
         success = False
     else:
-        success = out.get('data', {}).get('success', True)
+        success = out.get('success', True)
 
     ret = {'name': name,
            'changes': {'return': runner_return},
@@ -1119,11 +1120,11 @@ def wheel(name, **kwargs):
             ret['comment'] = 'wheel failed to run.'
         return ret
 
-    wheel_return = out.get('data', {}).get('return')
+    wheel_return = out.get('return')
     if isinstance(wheel_return, dict) and 'Error' in wheel_return:
         success = False
     else:
-        success = out.get('data', {}).get('success', True)
+        success = out.get('success', True)
     ret = {'name': name,
            'changes': {'return': wheel_return},
            'result': success}
