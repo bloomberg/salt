@@ -38,7 +38,7 @@ def __virtual__():
     '''
     if __grains__['kernel'] != 'Linux':
         return False
-    if not salt.utils.path.which('mdadm'):
+    if not salt.utils.path.which('mdadm_raid'):
         return False
     return __virtualname__
 
