@@ -33,14 +33,25 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-def master():
+def master(count=False):
     '''
     Return the actively executing runners for the master
+
+    count : False
+        if true, return a len() of the job count, not the job details
+
     CLI Example:
+
     .. code-block:: bash
         salt-run jobs.master
+
     '''
-    return salt.utils.master.get_running_jobs(__opts__)
+    jobs = salt.utils.master.get_running_jobs(__opts__)
+
+    if count:
+        return len(jobs)
+    else:
+        return jobs
 
 
 def active(display_progress=False):
@@ -577,23 +588,18 @@ def _format_jid_instance(jid, job, returns=None):
         return ret
 
     _return = job.get('return')
-    if isinstance(_return, dict) and _return.get('fun', '').startswith('runner.'):
-        _job = job['return']
-        ret = {'Function': _job.get('fun', 'unknown-function'),
-               'Arguments': list(_job.get('fun_args', [])),
-               'User': _job.get('user', 'root'),
-               # unlikely but safeguard from invalid returns
-               'Target': job.get('tgt', 'unknown-target'),
-               'Target-type': job.get('tgt_type', 'list'),}
-        # load contents for runners is equiv to returns, so we discard / dont need
-        ret['Results'] = _job['return']
-    else:
-        ret = {'Function': job.get('fun', 'unknown-function'),
-               'Arguments': list(job.get('arg', [])),
-               'User': job.get('user', 'root'),
-               # unlikely but safeguard from invalid returns
-               'Target': job.get('tgt', 'unknown-target'),
-               'Target-type': job.get('tgt_type', 'list'),}
+
+    ret = {'Function': job.get('fun', 'unknown-function'),
+           'Arguments': list(job.get('arg', [])),
+           'User': job.get('user', 'root'),
+           # unlikely but safeguard from invalid returns
+           'Target': job.get('tgt', 'unknown-target'),
+           'Target-type': job.get('tgt_type', 'list'),}
+
+    # an orchestration is wrapped in some envelope data
+    try:
+        ret['Results'] =  next(iter(returns.values()))['return']['return']
+    except (KeyError, StopIteration, AttributeError):
         ret['Results'] = returns
 
     if 'metadata' in job:
