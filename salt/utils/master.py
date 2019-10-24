@@ -473,7 +473,7 @@ class MasterPillarUtil(object):
                     self.cache.flush('pillar', minion_id)
 
                 if clear_grains:
-                    self.cache.flush('grians', minion_id)
+                    self.cache.flush('grains', minion_id)
                 if clear_mine:
                     self.cache.flush('mine', minion_id)
                 elif clear_mine_func is not None:
