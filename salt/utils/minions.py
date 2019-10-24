@@ -205,6 +205,21 @@ def mine_get(tgt, fun, tgt_type='glob', opts=None):
     return ret
 
 
+def sorted_auth_list(auth_list):
+    def by_recursive(elem):
+        try:
+            if isinstance(elem, six.string_types) and elem.endswith(':recursive'):
+                return True
+            elif isinstance(elem, dict) and next(six.iterkeys(elem)).endswith(':recursive'):
+                return True
+        except:
+            pass
+        return False
+
+    return sorted(auth_list, key=by_recursive, reverse=True)
+
+
+
 class CkMinions(object):
     '''
     Used to check what minions should respond from a target
@@ -954,10 +969,15 @@ class CkMinions(object):
             # problem
             if mismatch:
                 return (False, False)
+
+        # ensure recursive takes priority
+        auth_list = sorted_auth_list(auth_list)
+
         # compound commands will come in a list so treat everything as a list
         if not isinstance(funs, list):
             funs = [funs]
             args = [args]
+
         try:
             for num, fun in enumerate(funs):
                 if whitelist and fun in whitelist:
@@ -1083,6 +1103,10 @@ class CkMinions(object):
         '''
         if not auth_list:
             return (False, False)
+
+        # ensure recursive takes priority
+        auth_list = sorted_auth_list(auth_list)
+
         if form != 'cloud':
             comps = fun.split('.')
             if len(comps) != 2:
