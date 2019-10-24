@@ -17,7 +17,7 @@ from tests.support.mock import (
 )
 
 # Import Salt Libs
-import salt.states.mdadm as mdadm
+import salt.states.mdadm_raid as mdadm
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)
