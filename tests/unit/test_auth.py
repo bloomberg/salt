@@ -133,23 +133,23 @@ class MasterACLTestCase(ModuleCase):
         # make sure to return a JID, instead of a mock
         self.clear.mminion.returners = {'.prep_jid': lambda x: 1}
 
-        self.valid_clear_load = {'tgt_type': 'glob',
-                                'jid': '',
-                                'cmd': 'publish',
-                                'tgt': 'test_minion',
-                                'kwargs':
-                                    {'username': 'test_user',
-                                     'password': 'test_password',
-                                     'show_timeout': False,
-                                     'eauth': 'pam',
-                                     'show_jid': False},
-                                'ret': '',
-                                'user': 'test_user',
-                                'key': '',
-                                'arg': '',
-                                'fun': 'test.ping',
-                                }
-        self.addCleanup(delattr, self, 'valid_clear_load')
+    def valid_clear_load(self):
+        return {'tgt_type': 'glob',
+                'jid': '',
+                'cmd': 'publish',
+                'tgt': 'test_minion',
+                'kwargs':
+                    {'username': 'test_user',
+                     'password': 'test_password',
+                     'show_timeout': False,
+                     'eauth': 'pam',
+                     'show_jid': False},
+                'ret': '',
+                'user': 'test_user',
+                'key': '',
+                'arg': '',
+                'fun': 'test.ping',
+                }
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
     def test_master_publish_name(self):
@@ -160,11 +160,11 @@ class MasterACLTestCase(ModuleCase):
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
             # Can we access test.ping?
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(self.valid_clear_load())
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.ping')
 
             # Are we denied access to sys.doc?
-            sys_doc_load = self.valid_clear_load
+            sys_doc_load = self.valid_clear_load()
             sys_doc_load['fun'] = 'sys.doc'
             self.clear.publish(sys_doc_load)
             self.assertNotEqual(self.fire_event_mock.call_args[0][0]['fun'], 'sys.doc')  # If sys.doc were to fire, this would match
@@ -175,16 +175,17 @@ class MasterACLTestCase(ModuleCase):
         '''
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs']['user'] = 'new_user'
-            self.valid_clear_load['fun'] = 'test.echo'
-            self.valid_clear_load['arg'] = 'hello'
+            valid_clear_load = self.valid_clear_load()
+            valid_clear_load['kwargs']['user'] = 'new_user'
+            valid_clear_load['fun'] = 'test.echo'
+            valid_clear_load['arg'] = 'hello'
             with patch('salt.auth.LoadAuth.get_groups', return_value=['test_group', 'second_test_group']):
-                self.clear.publish(self.valid_clear_load)
+                self.clear.publish(valid_clear_load)
             # Did we fire test.echo?
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.echo')
 
             # Request sys.doc
-            self.valid_clear_load['fun'] = 'sys.doc'
+            valid_clear_load['fun'] = 'sys.doc'
             # Did we fire it?
             self.assertNotEqual(self.fire_event_mock.call_args[0][0]['fun'], 'sys.doc')
 
@@ -196,9 +197,10 @@ class MasterACLTestCase(ModuleCase):
         Note that in order for these sorts of tests to run correctly that
         you should NOT patch check_minions!
         '''
-        self.valid_clear_load['kwargs']['username'] = 'test_user_mminion'
-        self.valid_clear_load['user'] = 'test_user_mminion'
-        self.clear.publish(self.valid_clear_load)
+        valid_clear_load = self.valid_clear_load()
+        valid_clear_load['kwargs']['username'] = 'test_user_mminion'
+        valid_clear_load['user'] = 'test_user_mminion'
+        self.clear.publish(valid_clear_load)
         self.assertEqual(self.fire_event_mock.mock_calls, [])
 
     def test_master_not_user_glob_all(self):
@@ -216,10 +218,11 @@ class MasterACLTestCase(ModuleCase):
 
         WARNING: Do not patch this wit
         '''
-        self.valid_clear_load['kwargs']['username'] = 'NOT_A_VALID_USERNAME'
-        self.valid_clear_load['user'] = 'NOT_A_VALID_USERNAME'
-        self.valid_clear_load['fun'] = 'test.ping'
-        self.clear.publish(self.valid_clear_load)
+        valid_clear_load = self.valid_clear_load()
+        valid_clear_load['kwargs']['username'] = 'NOT_A_VALID_USERNAME'
+        valid_clear_load['user'] = 'NOT_A_VALID_USERNAME'
+        valid_clear_load['fun'] = 'test.ping'
+        self.clear.publish(valid_clear_load)
         self.assertEqual(self.fire_event_mock.mock_calls, [])
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
@@ -237,13 +240,14 @@ class MasterACLTestCase(ModuleCase):
         lies in what's returned from check_minions, but this checks a limited
         amount of logic on the way there as well. Note the inline patch.
         '''
+        valid_clear_load = self.valid_clear_load()
         requested_function = 'foo.bar'
         requested_tgt = 'minion_glob1'
-        self.valid_clear_load['tgt'] = requested_tgt
-        self.valid_clear_load['fun'] = requested_function
+        valid_clear_load['tgt'] = requested_tgt
+        valid_clear_load['fun'] = requested_function
         _check_minions_return = {'minions': ['minion_glob1'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):  # Assume that there is a listening minion match
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
         self.assertTrue(self.fire_event_mock.called, 'Did not fire {0} for minion tgt {1}'.format(requested_function, requested_tgt))
         self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], requested_function, 'Did not fire {0} for minion glob'.format(requested_function))
 
@@ -269,14 +273,15 @@ class MasterACLTestCase(ModuleCase):
             minion1:
                 - test.empty:
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['minion1'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': 'minion1',
                                           'fun': 'test.empty',
                                           'arg': ['TEST']})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.empty')
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
@@ -291,14 +296,15 @@ class MasterACLTestCase(ModuleCase):
                         - 'TEST'
                         - 'TEST.*'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['minion1'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': 'minion1',
                                           'fun': 'test.echo',
                                           'arg': ['TEST', 'any', 'TEST ABC']})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.echo')
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
@@ -313,10 +319,11 @@ class MasterACLTestCase(ModuleCase):
                         - 'TEST'
                         - 'TEST.*'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['minion1'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': 'minion1',
                                           'fun': 'test.echo',
                                           'arg': ['TEST',
@@ -325,7 +332,7 @@ class MasterACLTestCase(ModuleCase):
                                                   'arg 3',
                                                   {'kwarg1': 'val1',
                                                    '__kwarg__': True}]})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.echo')
 
     def test_args_simple_forbidden(self):
@@ -339,27 +346,28 @@ class MasterACLTestCase(ModuleCase):
                         - 'TEST'
                         - 'TEST.*'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['minion1'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
             # Wrong last arg
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': 'minion1',
                                           'fun': 'test.echo',
                                           'arg': ['TEST', 'any', 'TESLA']})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Wrong first arg
-            self.valid_clear_load['arg'] = ['TES', 'any', 'TEST1234']
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = ['TES', 'any', 'TEST1234']
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Missing the last arg
-            self.valid_clear_load['arg'] = ['TEST', 'any']
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = ['TEST', 'any']
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # No args
-            self.valid_clear_load['arg'] = []
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = []
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
@@ -373,17 +381,18 @@ class MasterACLTestCase(ModuleCase):
                     kwargs:
                         text: 'KWMSG:.*'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': '*',
                                           'fun': 'test.echo',
                                           'arg': [{'text': 'KWMSG: a message',
                                                    'anything': 'hello all',
                                                    'none': 'hello none',
                                                    '__kwarg__': True}]})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'], 'test.echo')
 
     def test_args_kwargs_mismatch(self):
@@ -396,44 +405,45 @@ class MasterACLTestCase(ModuleCase):
                     kwargs:
                         text: 'KWMSG:.*'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': '*',
                                           'fun': 'test.echo'})
             # Wrong kwarg value
-            self.valid_clear_load['arg'] = [{'text': 'KWMSG a message',
+            valid_clear_load['arg'] = [{'text': 'KWMSG a message',
                                              'anything': 'hello all',
                                              'none': 'hello none',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Missing kwarg value
-            self.valid_clear_load['arg'] = [{'anything': 'hello all',
+            valid_clear_load['arg'] = [{'anything': 'hello all',
                                              'none': 'hello none',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
-            self.valid_clear_load['arg'] = [{'__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = [{'__kwarg__': True}]
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
-            self.valid_clear_load['arg'] = [{}]
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = [{}]
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
-            self.valid_clear_load['arg'] = []
-            self.clear.publish(self.valid_clear_load)
+            valid_clear_load['arg'] = []
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Missing kwarg allowing any value
-            self.valid_clear_load['arg'] = [{'text': 'KWMSG: a message',
+            valid_clear_load['arg'] = [{'text': 'KWMSG: a message',
                                              'none': 'hello none',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
-            self.valid_clear_load['arg'] = [{'text': 'KWMSG: a message',
+            valid_clear_load['arg'] = [{'text': 'KWMSG: a message',
                                              'anything': 'hello all',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
 
     @skipIf(salt.utils.platform.is_windows(), 'PAM eauth not available on Windows')
@@ -451,10 +461,11 @@ class MasterACLTestCase(ModuleCase):
                         'kwa': 'kwa.*'
                         'kwb': 'kwb'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': '*',
                                           'fun': 'my_mod.some_func',
                                           'arg': ['alpha',
@@ -464,7 +475,7 @@ class MasterACLTestCase(ModuleCase):
                                                    'kwb': 'kwb',
                                                    'one_more': 'just one more',
                                                    '__kwarg__': True}]})
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.call_args[0][0]['fun'],
                              'my_mod.some_func')
 
@@ -482,47 +493,48 @@ class MasterACLTestCase(ModuleCase):
                         'kwa': 'kwa.*'
                         'kwb': 'kwb'
         '''
+        valid_clear_load = self.valid_clear_load()
         _check_minions_return = {'minions': ['some_minions'], 'missing': []}
         with patch('salt.utils.minions.CkMinions.check_minions', MagicMock(return_value=_check_minions_return)):
-            self.valid_clear_load['kwargs'].update({'username': 'test_user_func'})
-            self.valid_clear_load.update({'user': 'test_user_func',
+            valid_clear_load['kwargs'].update({'username': 'test_user_func'})
+            valid_clear_load.update({'user': 'test_user_func',
                                           'tgt': '*',
                                           'fun': 'my_mod.some_func'})
             # Wrong arg value
-            self.valid_clear_load['arg'] = ['alpha',
+            valid_clear_load['arg'] = ['alpha',
                                             'gamma',
                                             {'kwa': 'kwarg #1',
                                              'kwb': 'kwb',
                                              'one_more': 'just one more',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Wrong kwarg value
-            self.valid_clear_load['arg'] = ['alpha',
+            valid_clear_load['arg'] = ['alpha',
                                             'beta',
                                             'gamma',
                                             {'kwa': 'kkk',
                                              'kwb': 'kwb',
                                              'one_more': 'just one more',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Missing arg
-            self.valid_clear_load['arg'] = ['alpha',
+            valid_clear_load['arg'] = ['alpha',
                                             {'kwa': 'kwarg #1',
                                              'kwb': 'kwb',
                                              'one_more': 'just one more',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
             # Missing kwarg
-            self.valid_clear_load['arg'] = ['alpha',
+            valid_clear_load['arg'] = ['alpha',
                                             'beta',
                                             'gamma',
                                             {'kwa': 'kwarg #1',
                                              'one_more': 'just one more',
                                              '__kwarg__': True}]
-            self.clear.publish(self.valid_clear_load)
+            self.clear.publish(valid_clear_load)
             self.assertEqual(self.fire_event_mock.mock_calls, [])
 
 

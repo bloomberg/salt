@@ -1070,9 +1070,6 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             return False
 
         context = {'opts': self.opts}
-        # only add auth_check if it is already present, dont set an empty default
-        if 'auth_check' in load:
-            context['auth_check'] = load.pop('auth_check')
         # pass load down after removing auth_check
         context['data'] = load
 
@@ -1945,11 +1942,7 @@ class ClearFuncs(object):
         # All runner ops pass through eauth
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
 
-        # Authenticate
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
-            auth_check = RequestContext.current['auth_check']
-        else:
-            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
+        auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
 
         error = auth_check.get('error')
 
@@ -1966,7 +1959,7 @@ class ClearFuncs(object):
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
             if not permitted:
                 log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
@@ -1979,7 +1972,7 @@ class ClearFuncs(object):
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
-                clear_load.pop(item, None)
+                RequestContext.current.setdefault('eauth_opts', {})[item] = clear_load.pop(item, None)
         else:
             if 'user' in clear_load:
                 username = clear_load['user']
@@ -2021,11 +2014,7 @@ class ClearFuncs(object):
         # All wheel ops pass through eauth
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
 
-        # Authenticate
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
-            auth_check = RequestContext.current['auth_check']
-        else:
-            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
+        auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
 
         error = auth_check.get('error')
 
@@ -2034,6 +2023,9 @@ class ClearFuncs(object):
             return {'error': error}
 
         # Authorize
+        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
+            auth_check = RequestContext.current['auth_check']
+
         username = auth_check.get('username')
         if auth_type != 'user':
             (permitted, recursive) = self.ckminions.wheel_check(
@@ -2041,7 +2033,7 @@ class ClearFuncs(object):
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
             if not permitted:
                 log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
@@ -2053,7 +2045,7 @@ class ClearFuncs(object):
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
-                clear_load.pop(item, None)
+                RequestContext.current.setdefault('eauth_opts', {})[item] = clear_load.pop(item, None)
         else:
             if 'user' in clear_load:
                 username = clear_load['user']
@@ -2135,17 +2127,12 @@ class ClearFuncs(object):
         # Check for external auth calls and authenticate
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(extra)
 
-        # if auth_check is already in the request ctx, we don't re-authenticate, we assume
-        # from the previous call up the stack it is authenticated and just authorize
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load and 'eauth' not in clear_load.get('kwargs', {}):
-            auth_check = RequestContext.current['auth_check']
+        if auth_type == 'user':
+            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
         else:
-            if auth_type == 'user':
-                auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
-            else:
-                if 'key' in clear_load:
-                    extra['key'] = clear_load['key']
-                auth_check = self.loadauth.check_authentication(extra, auth_type)
+            if 'key' in clear_load:
+                extra['key'] = clear_load['key']
+            auth_check = self.loadauth.check_authentication(extra, auth_type)
 
         # Retrieve the minions list
         delimiter = clear_load.get('kwargs', {}).get('delimiter', DEFAULT_TARGET_DELIM)
@@ -2186,7 +2173,7 @@ class ClearFuncs(object):
                 # always accept find_job
                 whitelist=['saltutil.find_job'],
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
 
             if not permitted:
                 # Authorization error occurred. Do not continue.
@@ -2205,6 +2192,9 @@ class ClearFuncs(object):
             elif auth_type == 'eauth':
                 # The username we are attempting to auth with
                 clear_load['user'] = self.loadauth.load_name(extra)
+
+            for item in sensitive_load_keys:
+                RequestContext.current.setdefault('eauth_opts', {})[item] = extra.pop(item, None)
 
         # If we order masters (via a syndic), don't short circuit if no minions
         # are found
@@ -2447,10 +2437,6 @@ class ClearFuncs(object):
                 'Published command %s with jid %s',
                 clear_load['fun'], clear_load['jid']
             )
-
-        # if there is an active auth_check in current context, pass it down
-        if 'auth_check' in RequestContext.current:
-            load['auth_check'] = RequestContext.current['auth_check']
 
         log.debug('Published command details %s', load)
         return load
