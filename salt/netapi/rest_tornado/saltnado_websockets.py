@@ -293,7 +293,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 import tornado.websocket
 from . import event_processor
-from .saltnado import _check_cors_origin
+from .saltnado import _check_cors_origin, EventListener
 
 import tornado.gen
 
@@ -310,6 +310,17 @@ class AllEventsHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=W
     '''
     Server side websocket handler.
     '''
+
+    def initialize(self):
+        '''
+        Initialize the handler before requests are called
+        '''
+        if not hasattr(self.application, 'event_listener'):
+            log.debug('init a listener')
+            self.application.event_listener = EventListener(
+                self.application.mod_opts,
+                self.application.opts,
+            )
 
     # pylint: disable=W0221
     def get(self, token):
@@ -351,9 +362,10 @@ class AllEventsHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=W
 
             self.connected = True
 
+            queue = self.application.event_listener.get_event(self)
             while True:
                 try:
-                    event = yield self.application.event_listener.get_event(self)
+                    event = yield queue.get()
                     self.write_message(
                         salt.utils.json.dumps(event, _json_module=_json))
                 except Exception as err:
@@ -370,6 +382,7 @@ class AllEventsHandler(tornado.websocket.WebSocketHandler):  # pylint: disable=W
 
         '''
         log.debug('In the websocket close method')
+        self.application.event_listener.clean_by_request(self)
         self.close()
 
     def check_origin(self, origin):
@@ -414,9 +427,10 @@ class FormattedEventsHandler(AllEventsHandler):  # pylint: disable=W0223,W0232
                 'asynchronous': 'local_async',
                 'client': 'local'
                 })
+            queue = self.application.event_listener.get_event(self)
             while True:
                 try:
-                    event = yield self.application.event_listener.get_event(self)
+                    event = yield queue.get()
                     evt_processor.process(event, self.token, self.application.opts)
                     # self.write_message('data: {0}\n\n'.format(salt.utils.json.dumps(event, _json_module=_json)))
                 except Exception as err:
