@@ -3974,6 +3974,9 @@ class BaseHighState(object):
                             'No matching salt environment for environment '
                             '\'{0}\' found'.format(saltenv)
                         )
+                    # first match is highest priority
+                    if statefiles:
+                        break
 
                 # if we did not found any sls in the fileserver listing, this
                 # may be because the sls was generated or added later, we can
