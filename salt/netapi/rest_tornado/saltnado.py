@@ -977,6 +977,11 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
         # fire a job off
         pub_data = yield self.saltclients['local'](*f_call.get('args', ()), **f_call.get('kwargs', {}))
 
+        # if the job didn't publish, lets not wait around for nothing
+        # TODO: set header??
+        if 'jid' not in pub_data:
+            raise tornado.gen.Return('No minions matched the target. No command was sent, no jid was assigned.')
+
         # Map of minion_id -> returned for all minions we think we need to wait on
         cached_minions = self.ckminions.check_minions(chunk['tgt'], chunk.get('tgt_type', 'glob'))
         minions = {m: False for m in set(pub_data['minions']) & set(cached_minions['minions'])}
