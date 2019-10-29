@@ -1145,7 +1145,7 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
             event = yield queue.get(timeout=timedelta(seconds=timeout))
 
             # only return the return data
-            ret = event if full_return else event['data']['return']
+            ret = event['data'] if full_return else event['data']['return']
             raise tornado.gen.Return(ret)
         except TimeoutError:
             raise tornado.gen.Return('Timeout waiting for runner to execute')

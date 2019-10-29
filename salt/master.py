@@ -2210,16 +2210,17 @@ class ClearFuncs(object):
                     }
                 }
 
-        # store auth_check for later nested authorizations from this call
-        # only if auth_list is defined
-        if auth_check.get('auth_list'):
-            RequestContext.current['auth_check'] = auth_check
 
         jid = self._prep_jid(clear_load, extra)
         if jid is None:
             return {'enc': 'clear',
                     'load': {'error': 'Master failed to assign jid'}}
         payload = self._prep_pub(minions, jid, clear_load, extra, missing)
+
+        # store auth_check for later nested authorizations from this call
+        # only if auth_list is defined
+        if auth_check.get('auth_list'):
+            payload['auth_check'] = RequestContext.current['auth_check'] = auth_check
 
         # Send it!
         self._send_ssh_pub(payload, ssh_minions=ssh_minions)
