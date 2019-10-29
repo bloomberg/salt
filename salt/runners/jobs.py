@@ -187,6 +187,10 @@ def lookup_jid(jid,
     if not ret:
         return ret
 
+    # if ret already has outputter just leave it
+    if 'outputter' in ret:
+        return ret
+
     if not outputter:
         outputter = 'nested'
 
