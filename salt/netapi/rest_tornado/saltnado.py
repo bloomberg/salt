@@ -980,11 +980,6 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
         # if the job didn't publish, lets not wait around for nothing
         # TODO: set header??
         if 'jid' not in pub_data:
-            for future in events:
-                try:
-                    future.set_result(None)
-                except Exception:
-                    pass
             raise tornado.gen.Return('No minions matched the target. No command was sent, no jid was assigned.')
 
         # Map of minion_id -> returned for all minions we think we need to wait on
