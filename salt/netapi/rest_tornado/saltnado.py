@@ -980,7 +980,7 @@ class SaltAPIHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
         # if the job didn't publish, lets not wait around for nothing
         # TODO: set header??
         if 'jid' not in pub_data:
-            for future in events:
+            for future in queues:
                 try:
                     future.set_result(None)
                 except Exception:
