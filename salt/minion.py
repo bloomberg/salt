@@ -1593,6 +1593,8 @@ class Minion(MinionBase):
         # only add auth_check if it exists
         if 'auth_check' in data:
             current_context['auth_check'] = data.pop('auth_check')
+        if 'recursive' in data:
+            current_context['recursive'] = data.pop('recursive')
         with tornado.stack_context.StackContext(functools.partial(RequestContext, current_context)):
             with tornado.stack_context.StackContext(minion_instance.ctx):
                 run_func(minion_instance, opts, data)

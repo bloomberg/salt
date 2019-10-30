@@ -2219,8 +2219,16 @@ class ClearFuncs(object):
 
         # store auth_check for later nested authorizations from this call
         # only if auth_list is defined
-        if auth_check.get('auth_list'):
+        # MATT NOTE: we can reverse these two lines once the coinciding minion.py
+        # changes are fully deployed, so auth_check gets pushed to minion
+        # the end result is the same (unfettered access), but we should propogate
+        # auth_check and recursive bits if it applies to a request
+        #if auth_check.get('auth_list'):
+        if auth_check.get('auth_list') and not RequestContext.current.get('recursive'):
             payload['auth_check'] = RequestContext.current['auth_check'] = auth_check
+
+        if RequestContext.current.get('recursive'):
+            payload['recursive'] = RequestContext.current.get('recursive', False)
 
         # Send it!
         self._send_ssh_pub(payload, ssh_minions=ssh_minions)
@@ -2438,6 +2446,10 @@ class ClearFuncs(object):
                 'Published command %s with jid %s',
                 clear_load['fun'], clear_load['jid']
             )
+
+        # if there is an active auth_check in current context, pass it down
+        if 'auth_check' in RequestContext.current:
+            load['auth_check'] = RequestContext.current['auth_check']
 
         log.debug('Published command details %s', load)
         return load
