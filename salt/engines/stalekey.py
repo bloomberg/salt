@@ -89,7 +89,7 @@ def start(interval=3600, expire=604800):
         stale_keys = []
         for m, seen in six.iteritems(minions):
             if now - expire > seen:
-                stale_keys.append(m)
+                stale_keys.append(six.ensure_str(m))
 
         if len(stale_keys):
             for k in stale_keys:
