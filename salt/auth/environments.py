@@ -14,6 +14,15 @@ import salt.loader
 
 log = logging.getLogger(__name__)
 
+def _flatten_list(l):
+    if l:
+        flat_list = []
+        for sublist in l:
+            for item in sublist:
+                flat_list.append(item)
+        return flat_list
+    return l
+
 def acl(id=None, grains=None, **kwargs):
     pillars = salt.loader.pillars(__opts__, __salt__)
     # we have to fetch the environments mapped to a node indirectly like this
@@ -31,6 +40,8 @@ def acl(id=None, grains=None, **kwargs):
     for tenancy in tenancies:
         if tenancy in __opts__['external_auth']['never']:
             acl.append(__opts__['external_auth']['never'][tenancy])
+
+    acl = _flatten_list(acl)
 
     # we dont want to return an empty list as there is an upstream 'is None' check
     # to use the defaults, [] would override that.
