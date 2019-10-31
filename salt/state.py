@@ -2497,7 +2497,14 @@ class State(object):
                                 'Could not locate requisite of [{0}] present in state with name [{1}]'.format(
                                     req_key, chunk['name']))
                     if not found:
-                        return 'unmet', ()
+                        if r_state.endswith('_any'):
+                            # we need to ensure at least one id is valid
+                            if not len(reqs[r_state]):
+                                raise SaltRenderError(
+                                    'Could not find at least one valid id for requisite of [{0}] present in state with name [{1}]'.format(
+                                        req_key, chunk['name']))
+                        else:
+                            return 'unmet', ()
         fun_stats = set()
         for r_state, chunks in six.iteritems(reqs):
             req_stats = set()
