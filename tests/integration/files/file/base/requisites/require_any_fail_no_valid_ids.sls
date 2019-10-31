@@ -18,9 +18,7 @@ A:
   cmd.run:
     - name: echo A
     - require_any:
-      - cmd: B
-      - cmd: C
-      - cmd: D
+      - cmd: enrgoineoigno
       - cmd: NOT REAL # IMPORTANT: this id tests a nonexistent id is a test case
 B:
   cmd.run:
