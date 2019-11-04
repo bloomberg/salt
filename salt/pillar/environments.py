@@ -196,6 +196,7 @@ def ext_pillar(minion_id, pillar=None, *args):
     node_stage = node.stage()
     
     if node_stage is None:
+        log.debug('%s minion found but stage was None.', minion_id)
         return stage_envs('nostage', global_tenancy_groups)
 
     # any matching tenancy_group is a 1 to 1 association with environment
