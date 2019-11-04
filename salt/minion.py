@@ -1905,6 +1905,31 @@ class Minion(MinionBase):
                         data['jid'], exc
                     )
 
+    def flush_jid_proc_file(self, jid):
+        fn_ = os.path.join(self.proc_dir, jid)
+        attempts = 5
+
+        for attempt in range(1, attempts + 1):
+            try:
+                os.remove(fn_)
+                break
+            except FileNotFoundError:
+                log.info('cannot remove %s, it does not exist',fn_)
+                break
+            except OSError as exc:
+                if exc.errno == errno.ENOENT:
+                    log.info('cannot remove %s, it does not exist',fn_)
+                    break
+                log.exception('Failed to remove %s: %s', fn_, exc)
+            except IOError as exc:
+                log.exception('Failed to remove %s: %s', fn_, exc)
+
+            # if we've reached here, we failed, lets sleep and try again
+            time.sleep(0.05)
+
+        if os.path.isfile(fn_):
+            log.critical('failed to removed jid %s after %n attempts', fn_, attempts)
+
     def _return_pub(self, ret, ret_cmd='_return', timeout=60, sync=True):
         '''
         Return the data from the executed command to the master server
@@ -1912,13 +1937,7 @@ class Minion(MinionBase):
         jid = ret.get('jid', ret.get('__jid__'))
         fun = ret.get('fun', ret.get('__fun__'))
         if self.opts['multiprocessing']:
-            fn_ = os.path.join(self.proc_dir, jid)
-            if os.path.isfile(fn_):
-                try:
-                    os.remove(fn_)
-                except (OSError, IOError):
-                    # The file is gone already
-                    pass
+            self.flush_jid_proc_file(jid)
         log.info('Returning information for job: %s', jid)
         log.trace('Return data: %s', ret)
         if ret_cmd == '_syndic_return':
@@ -2001,13 +2020,7 @@ class Minion(MinionBase):
             jid = ret.get('jid', ret.get('__jid__'))
             fun = ret.get('fun', ret.get('__fun__'))
             if self.opts['multiprocessing']:
-                fn_ = os.path.join(self.proc_dir, jid)
-                if os.path.isfile(fn_):
-                    try:
-                        os.remove(fn_)
-                    except (OSError, IOError):
-                        # The file is gone already
-                        pass
+                self.flush_jid_proc_file(jid)
             log.info('Returning information for job: %s', jid)
             load = jids.setdefault(jid, {})
             if ret_cmd == '_syndic_return':

@@ -150,7 +150,6 @@ def lookup_jid(jid,
             ext_source=ext_source,
             display_progress=display_progress
         )
-
     except TypeError:
         return ('Requested returner could not be loaded. '
                 'No JIDs could be retrieved.')
@@ -603,7 +602,7 @@ def _format_jid_instance(jid, job, returns=None):
     # an orchestration is wrapped in some envelope data
     try:
         ret['Results'] =  next(iter(returns.values()))['return']['return']
-    except (KeyError, StopIteration, AttributeError):
+    except Exception:
         ret['Results'] = returns
 
     if 'metadata' in job:
