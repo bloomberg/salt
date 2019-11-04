@@ -193,7 +193,12 @@ def ext_pillar(minion_id, pillar=None, *args):
     if node is None:
         return stage_envs('nostage', global_tenancy_groups)
 
+    node_stage = node.stage()
+    
+    if node_stage is None:
+        return stage_envs('nostage', global_tenancy_groups)
+
     # any matching tenancy_group is a 1 to 1 association with environment
     # we use an IndexedSet to ensure global roots are always highest priority
     tenancies = IndexedSet(global_tenancy_groups | tenancy_groups_set(node))
-    return stage_envs(node.stage(), tenancies)
+    return stage_envs(node_stage, tenancies)
