@@ -123,10 +123,10 @@ def state(name,
         fail_minions=None,
         allow_fail=0,
         exclude=None,
-        concurrent=False,
+        concurrent=None,
         timeout=None,
         batch=None,
-        queue=False,
+        queue=None,
         subset=None,
         orchestration_jid=None,
         failhard=None,
@@ -347,10 +347,13 @@ def state(name,
     if force is not None:
         cmd_kw['kwarg']['force'] = force
 
-    cmd_kw['kwarg']['queue'] = queue
+    if queue is not None:
+        cmd_kw['kwarg']['queue'] = queue
 
     if isinstance(concurrent, bool):
         cmd_kw['kwarg']['concurrent'] = concurrent
+    elif concurrent is None:
+        pass
     else:
         state_ret['comment'] = ('Must pass in boolean for value of \'concurrent\'')
         state_ret['result'] = False

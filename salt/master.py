@@ -2466,10 +2466,10 @@ class ClearFuncs(object):
         # auth_check and recursive bits if it applies to a request
         #if auth_check.get('auth_list'):
         if auth_check.get('auth_list') and not RequestContext.current.get('recursive'):
-            payload['auth_check'] = RequestContext.current['auth_check'] = auth_check
+            load['auth_check'] = RequestContext.current['auth_check'] = auth_check
 
         if RequestContext.current.get('recursive'):
-            payload['recursive'] = RequestContext.current.get('recursive', False)
+            load['recursive'] = RequestContext.current.get('recursive', False)
 
         if 'opts_overrides' in RequestContext.current:
             load['opts_overrides'] = RequestContext.current['opts_overrides']

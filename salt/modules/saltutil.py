@@ -1460,7 +1460,11 @@ def cmd(tgt,
         for k in __opts__['opts_overrides']:
             # if its set in context respect it, else yank from opts
             # this allows it to be set unless its already been set
-            overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            try:
+                overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            except KeyError:
+                raise CommandExecutionError('opts_override %s was specified, but not found in __opts__ config.', k)
+
         kwargs['opts_overrides'] = overrides
 
     # short-circuit if recursive to allow for user key auth
@@ -1625,7 +1629,11 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
         for k in __opts__['opts_overrides']:
             # if its set in context respect it, else yank from opts
             # this allows it to be set unless its already been set
-            overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            try:
+                overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            except KeyError:
+                raise CommandExecutionError('opts_override %s was specified, but not found in __opts__ config.', k)
+
         kwargs['opts_overrides'] = overrides
 
     if eauth:
