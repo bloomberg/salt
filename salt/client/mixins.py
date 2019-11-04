@@ -53,6 +53,7 @@ CLIENT_INTERNAL_KEYWORDS = frozenset([
     '__user__',
     'username',
     'password',
+    'opts_overrides',
 ])
 
 
