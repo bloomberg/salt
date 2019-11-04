@@ -1531,11 +1531,6 @@ class LazyLoader(salt.utils.lazy.LazyDict):
             if mod_name in k:
                 yield k
 
-        # anyone else? Bueller?
-        for k in self.file_mapping:
-            if mod_name not in k:
-                yield k
-
     def _reload_submodules(self, mod):
         submodules = (
             getattr(mod, sname) for sname in dir(mod) if
