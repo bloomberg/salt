@@ -1564,7 +1564,20 @@ class Minion(MinionBase):
 
     @classmethod
     def _target(cls, minion_instance, opts, data, connected):
-        if not minion_instance:
+        # if master asks for opts overrides, apply them
+        current_context = {'data': data}
+
+        # only add auth_check if it exists
+        if 'auth_check' in data:
+            current_context['auth_check'] = data.pop('auth_check')
+        if 'recursive' in data:
+            current_context['recursive'] = data.pop('recursive')
+        if 'opts_overrides' in data:
+            current_context['opts_overrides'] = data.pop('opts_overrides')
+            opts = copy.deepcopy(opts)
+            opts.update(current_context['opts_overrides'])
+
+        if not minion_instance or current_context.get('opts_overrides'):
             minion_instance = cls(opts)
             minion_instance.connected = connected
             if not hasattr(minion_instance, 'functions'):
@@ -1589,12 +1602,6 @@ class Minion(MinionBase):
             else:
                 return Minion._thread_return(minion_instance, opts, data)
 
-        current_context = {'data': data, 'opts': opts, }
-        # only add auth_check if it exists
-        if 'auth_check' in data:
-            current_context['auth_check'] = data.pop('auth_check')
-        if 'recursive' in data:
-            current_context['recursive'] = data.pop('recursive')
         with tornado.stack_context.StackContext(functools.partial(RequestContext, current_context)):
             with tornado.stack_context.StackContext(minion_instance.ctx):
                 run_func(minion_instance, opts, data)

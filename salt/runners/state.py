@@ -107,10 +107,6 @@ def orchestrate(mods,
     __opts__['file_client'] = 'local'
     minion = salt.minion.MasterMinion(__opts__)
 
-    if pillarenv is None and 'pillarenv' in __opts__:
-        pillarenv = __opts__['pillarenv']
-    if saltenv is None and 'saltenv' in __opts__:
-        saltenv = __opts__['saltenv']
     if orchestration_jid is None:
         orchestration_jid = salt.utils.jid.gen_jid(__opts__)
 

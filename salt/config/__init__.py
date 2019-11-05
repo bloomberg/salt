@@ -239,6 +239,9 @@ VALID_OPTS = {
     # live in the cache dir.
     'backup_mode': six.string_types,
 
+    # if specified, a list of opt vars that can be overridden in low data for master
+    'opts_overrides': list,
+
     # A default renderer for all operations on this host
     'renderer': six.string_types,
 
@@ -259,6 +262,9 @@ VALID_OPTS = {
 
     # Prevent saltenv from being overridden on the command line
     'lock_saltenv': bool,
+
+    # Prevent pillarenv from being overridden on the command line
+    'lock_pillarenv': bool,
 
     # Force the minion into a single pillar root when it fetches pillar data from the master
     'pillarenv': (type(None), six.string_types),
@@ -1284,6 +1290,7 @@ DEFAULT_MINION_OPTS = {
     'autoload_dynamic_modules': True,
     'saltenv': None,
     'lock_saltenv': False,
+    'lock_pillarenv': False,
     'pillarenv': None,
     'pillarenv_from_saltenv': False,
     'pillar_opts': False,
@@ -1590,9 +1597,11 @@ DEFAULT_MASTER_OPTS = {
         'base': [salt.syspaths.BASE_THORIUM_ROOTS_DIR],
         },
     'top_file_merging_strategy': 'merge',
+    'opts_overrides': [],
     'env_order': [],
     'saltenv': None,
     'lock_saltenv': False,
+    'lock_pillarenv': False,
     'pillarenv': None,
     'default_top': 'base',
     'file_client': 'local',

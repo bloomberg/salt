@@ -239,25 +239,19 @@ def get_sls_opts(opts, pillar=None, **kwargs):
         opts['pillarenv'] = None
         return opts
 
-    if 'saltenv' in kwargs:
-        saltenv = kwargs['saltenv']
-        if saltenv is not None:
-            if not isinstance(saltenv, six.string_types):
-                saltenv = six.text_type(saltenv)
-            if opts['lock_saltenv'] and saltenv != opts['saltenv']:
-                raise CommandExecutionError(
-                    'lock_saltenv is enabled, saltenv cannot be changed'
-                )
-            opts['saltenv'] = kwargs['saltenv']
+    if opts.get('pillarenv_from_saltenv'):
+        kwargs.setdefault('pillarenv', kwargs.get('saltenv'))
 
-    pillarenv = None
-    if kwargs.get('pillarenv'):
-        pillarenv = kwargs.get('pillarenv')
-    if opts.get('pillarenv_from_saltenv') and not pillarenv:
-        pillarenv = kwargs.get('saltenv')
-    if pillarenv is not None and not isinstance(pillarenv, six.string_types):
-        opts['pillarenv'] = six.text_type(pillarenv)
-    else:
-        opts['pillarenv'] = pillarenv
+    for env_attr in ['saltenv', 'pillarenv']:
+        if env_attr in kwargs:
+            env = kwargs[env_attr]
+            if env is not None:
+                if not isinstance(env, six.string_types):
+                    env = six.text_type(env)
+                if opts['lock_{}'.format(env_attr)] and env != opts[env_attr]:
+                    raise CommandExecutionError(
+                        'lock_{0} is enabled, {0} cannot be changed'.format(env_attr)
+                    )
+                opts[env_attr] = kwargs[env_attr]
 
     return opts

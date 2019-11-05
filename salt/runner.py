@@ -79,7 +79,7 @@ class RunnerClient(mixins.SyncClientMixin, mixins.AsyncClientMixin, object):
         verify_fun(self.functions, fun)
 
         eauth_creds = dict([(i, low.pop(i)) for i in [
-            'username', 'password', 'eauth', 'token', 'client', 'user', 'key', 'timeout', 'jid', 'eauth_opts', 'auth_check',
+            'username', 'password', 'eauth', 'token', 'client', 'user', 'key', 'timeout', 'jid', 'eauth_opts', 'auth_check', 'opts_overrides'
         ] if i in low])
 
         # Run name=value args through parse_input. We don't need to run kwargs

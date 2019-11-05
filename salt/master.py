@@ -1561,7 +1561,6 @@ class AESFuncs(object):
             # eauth here is irrelevant, it just needs to be not rejected by loadauth
             load['eauth'] = 'default'
             auth_list = self.loadauth.get_auth_list(load)
-
             auth_check = {'auth_list': auth_list,
                           'auth_type': '_pillar',
                           'tags': self.opts.get('loader_acl', [])}
@@ -1987,7 +1986,22 @@ class ClearFuncs(object):
             RequestContext.current['auth_check'] = auth_check
 
             fun = clear_load.pop('fun')
-            runner_client = salt.runner.RunnerClient(self.opts)
+
+            if 'opts_overrides' in clear_load:
+                opts_overrides = clear_load.pop('opts_overrides')
+                disallowed = [k for k in opts_overrides.keys() if k not in self.opts['opts_overrides']]
+                if disallowed:
+                    log.error('opts_overrides were specified but not allowed: %s', disallowed)
+                    return {'error': {'name': err_name,
+                                       'message': 'Authentication failure of type "{0}" occurred for '
+                                                 'user "{1}".'.format(auth_type, username)}}
+                opts = copy.deepcopy(self.opts)
+                opts.update(opts_overrides)
+                RequestContext.current['opts_overrides'] = opts_overrides
+            else:
+                opts = self.opts
+
+            runner_client = salt.runner.RunnerClient(opts)
 
             # if runner is pre-subscribed from ie salt-api, honor it
             if 'jid' in clear_load:
@@ -2175,6 +2189,7 @@ class ClearFuncs(object):
             )
             RequestContext.current['recursive'] = recursive
 
+
             if not permitted:
                 # Authorization error occurred. Do not continue.
                 if auth_type == 'eauth' and not auth_list and 'username' in extra and 'eauth' in extra:
@@ -2210,25 +2225,21 @@ class ClearFuncs(object):
                     }
                 }
 
+        if 'opts_overrides' in extra:
+            opts_overrides = extra.pop('opts_overrides')
+            disallowed = [k for k in opts_overrides.keys() if k not in self.opts['opts_overrides']]
+            if disallowed:
+                log.error('opts_overrides were specified but not allowed: %s', disallowed)
+                return {'error': {'name': err_name,
+                                   'message': 'Authentication failure of type "{0}" occurred for '
+                                             'user "{1}".'.format(auth_type, username)}}
+            RequestContext.current['opts_overrides'] = opts_overrides
 
         jid = self._prep_jid(clear_load, extra)
         if jid is None:
             return {'enc': 'clear',
                     'load': {'error': 'Master failed to assign jid'}}
-        payload = self._prep_pub(minions, jid, clear_load, extra, missing)
-
-        # store auth_check for later nested authorizations from this call
-        # only if auth_list is defined
-        # MATT NOTE: we can reverse these two lines once the coinciding minion.py
-        # changes are fully deployed, so auth_check gets pushed to minion
-        # the end result is the same (unfettered access), but we should propogate
-        # auth_check and recursive bits if it applies to a request
-        #if auth_check.get('auth_list'):
-        if auth_check.get('auth_list') and not RequestContext.current.get('recursive'):
-            payload['auth_check'] = RequestContext.current['auth_check'] = auth_check
-
-        if RequestContext.current.get('recursive'):
-            payload['recursive'] = RequestContext.current.get('recursive', False)
+        payload = self._prep_pub(minions, jid, clear_load, extra, missing, auth_check)
 
         # Send it!
         self._send_ssh_pub(payload, ssh_minions=ssh_minions)
@@ -2310,7 +2321,7 @@ class ClearFuncs(object):
             log.debug('Send payload to ssh minions')
             threading.Thread(target=self.ssh_client.cmd, kwargs=load).start()
 
-    def _prep_pub(self, minions, jid, clear_load, extra, missing):
+    def _prep_pub(self, minions, jid, clear_load, extra, missing, auth_check):
         '''
         Take a given load and perform the necessary steps
         to prepare a publication.
@@ -2447,9 +2458,21 @@ class ClearFuncs(object):
                 clear_load['fun'], clear_load['jid']
             )
 
-        # if there is an active auth_check in current context, pass it down
-        if 'auth_check' in RequestContext.current:
-            load['auth_check'] = RequestContext.current['auth_check']
+        # store auth_check for later nested authorizations from this call
+        # only if auth_list is defined
+        # MATT NOTE: we can reverse these two lines once the coinciding minion.py
+        # changes are fully deployed, so auth_check gets pushed to minion
+        # the end result is the same (unfettered access), but we should propogate
+        # auth_check and recursive bits if it applies to a request
+        #if auth_check.get('auth_list'):
+        if auth_check.get('auth_list') and not RequestContext.current.get('recursive'):
+            load['auth_check'] = RequestContext.current['auth_check'] = auth_check
+
+        if RequestContext.current.get('recursive'):
+            load['recursive'] = RequestContext.current.get('recursive', False)
+
+        if 'opts_overrides' in RequestContext.current:
+            load['opts_overrides'] = RequestContext.current['opts_overrides']
 
         log.debug('Published command details %s', load)
         return load
