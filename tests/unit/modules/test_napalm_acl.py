@@ -16,7 +16,7 @@ from tests.support.mock import (
 )
 
 import tests.support.napalm as napalm_test_support
-import salt.modules.napalm_acl as napalm_acl  # NOQA
+import salt.modules.napalm_netacl as napalm_acl  # NOQA
 
 
 def mock_capirca_term_config(platform, filter_name, term_name, *args, **kwargs):

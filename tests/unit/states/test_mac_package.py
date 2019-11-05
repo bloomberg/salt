@@ -5,7 +5,7 @@ from __future__ import absolute_import, unicode_literals, print_function
 import sys
 
 # Import Salt Libs
-import salt.states.mac_package as macpackage
+import salt.states.macpackage as macpackage
 
 # Import Salt Testing Libs
 from tests.support.mixins import LoaderModuleMockMixin
@@ -25,7 +25,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a PKG file
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {'installed': ['some.other.id']},
                 'comment': '/path/to/file.pkg installed',
@@ -51,7 +51,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a PKG file where it's already installed
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {},
                 'comment': '',
@@ -77,7 +77,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a PKG file where the version number matches the current installed version
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {},
                 'comment': 'Version already matches .*5\\.1\\.[0-9]',
@@ -106,7 +106,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a PKG file where the version number if different from the expected one
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {'installed': ['some.other.id']},
                 'comment': 'Version Version of this: 1.8.9 doesn\'t match .*5\\.1\\.[0-9]. /path/to/file.pkg installed',
@@ -135,7 +135,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a DMG file
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {'installed': ['some.other.id']},
                 'comment': '/path/to/file.dmg installed',
@@ -167,7 +167,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing a DMG file when the package already exists
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock:
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock:
             expected = {
                 'changes': {},
                 'comment': '',
@@ -199,7 +199,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing an APP file
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock, \
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock, \
                 patch('os.path.exists') as exists_mock:
             expected = {
                 'changes': {'installed': ['file.app']},
@@ -222,7 +222,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing an APP file that already exists
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock, \
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock, \
                 patch('os.path.exists') as exists_mock:
             expected = {
                 'changes': {},
@@ -245,7 +245,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing an APP file contained in a DMG file
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock, \
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock, \
                 patch('os.path.exists') as exists_mock:
             expected = {
                 'changes': {'installed': ['file.app']},
@@ -277,7 +277,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test installing an APP file contained in a DMG file where the file exists
         '''
-        with patch('salt.states.mac_package._mod_run_check') as _mod_run_check_mock, \
+        with patch('salt.states.macpackage._mod_run_check') as _mod_run_check_mock, \
                 patch('os.path.exists') as exists_mock:
             expected = {
                 'changes': {},

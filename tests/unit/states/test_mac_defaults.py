@@ -4,7 +4,7 @@
 from __future__ import absolute_import, unicode_literals, print_function
 
 # Import Salt Libs
-import salt.states.mac_defaults as macdefaults
+import salt.states.macdefaults as macdefaults
 
 # Import Salt Testing Libs
 from tests.support.mixins import LoaderModuleMockMixin

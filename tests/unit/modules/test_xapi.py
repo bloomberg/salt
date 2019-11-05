@@ -18,7 +18,7 @@ from tests.support.mock import (
 )
 
 # Import Salt Libs
-import salt.modules.xapi as xapi
+import salt.modules.xapi_virt as xapi
 
 
 class Mockxapi(object):

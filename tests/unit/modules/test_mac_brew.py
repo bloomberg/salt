@@ -7,7 +7,7 @@
 from __future__ import absolute_import, unicode_literals, print_function
 
 # Import Salt Libs
-import salt.modules.mac_brew as mac_brew
+import salt.modules.mac_brew_pkg as mac_brew
 from salt.exceptions import CommandExecutionError
 import salt.utils.pkg
 
@@ -24,7 +24,7 @@ HOMEBREW_BIN = '/usr/local/bin/brew'
 @skipIf(NO_MOCK, NO_MOCK_REASON)
 class BrewTestCase(TestCase, LoaderModuleMockMixin):
     '''
-    TestCase for salt.modules.mac_brew module
+    TestCase for salt.modules.mac_brew_pkg module
     '''
     def setup_loader_modules(self):
         return {mac_brew: {'__opts__': {'user': MagicMock(return_value='bar')}}}
@@ -50,7 +50,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
         '''
         Tests if tap argument is already installed or not
         '''
-        with patch('salt.modules.mac_brew._list_taps', MagicMock(return_value=TAPS_LIST)):
+        with patch('salt.modules.mac_brew_pkg._list_taps', MagicMock(return_value=TAPS_LIST)):
             self.assertTrue(mac_brew._tap('homebrew/science'))
 
     def test_tap_failure(self):
@@ -65,7 +65,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
         with patch.dict(mac_brew.__salt__, {'cmd.run_all': mock_failure,
                                         'file.get_user': mock_user,
                                         'cmd.run': mock_cmd}), \
-                patch('salt.modules.mac_brew._list_taps', MagicMock(return_value={})):
+                patch('salt.modules.mac_brew_pkg._list_taps', MagicMock(return_value={})):
             self.assertFalse(mac_brew._tap('homebrew/test'))
 
     def test_tap(self):
@@ -78,7 +78,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
         with patch.dict(mac_brew.__salt__, {'cmd.run_all': mock_failure,
                                             'file.get_user': mock_user,
                                             'cmd.run': mock_cmd}), \
-                patch('salt.modules.mac_brew._list_taps', MagicMock(return_value=TAPS_LIST)):
+                patch('salt.modules.mac_brew_pkg._list_taps', MagicMock(return_value=TAPS_LIST)):
             self.assertTrue(mac_brew._tap('homebrew/test'))
 
     # '_homebrew_bin' function tests: 1
@@ -132,7 +132,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
         Tests if package to be removed exists
         '''
         mock_params = MagicMock(return_value=({'foo': None}, 'repository'))
-        with patch('salt.modules.mac_brew.list_pkgs', return_value={'test': '0.1.5'}), \
+        with patch('salt.modules.mac_brew_pkg.list_pkgs', return_value={'test': '0.1.5'}), \
                 patch.dict(mac_brew.__salt__, {'pkg_resource.parse_targets': mock_params}):
             self.assertEqual(mac_brew.remove('foo'), {})
 
@@ -148,7 +148,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
                                                'retcode': 1})
         with patch.dict(mac_brew.__salt__, {'file.get_user': mock_user,
                                             'cmd.run_all': mock_failure}), \
-                patch('salt.modules.mac_brew._homebrew_bin',
+                patch('salt.modules.mac_brew_pkg._homebrew_bin',
                       MagicMock(return_value=HOMEBREW_BIN)):
             with patch.object(salt.utils.pkg, 'clear_rtag', Mock()):
                 self.assertRaises(CommandExecutionError, mac_brew.refresh_db)
@@ -161,7 +161,7 @@ class BrewTestCase(TestCase, LoaderModuleMockMixin):
         mock_success = MagicMock(return_value={'retcode': 0})
         with patch.dict(mac_brew.__salt__, {'file.get_user': mock_user,
                                         'cmd.run_all': mock_success}), \
-                patch('salt.modules.mac_brew._homebrew_bin',
+                patch('salt.modules.mac_brew_pkg._homebrew_bin',
                       MagicMock(return_value=HOMEBREW_BIN)):
             with patch.object(salt.utils.pkg, 'clear_rtag', Mock()):
                 self.assertTrue(mac_brew.refresh_db())
