@@ -277,6 +277,9 @@ VALID_OPTS = {
 
     'state_top_saltenv': (type(None), six.string_types),
 
+    # default state queue behavior
+    'state_queue': bool,
+
     # States to run when a minion starts up
     'startup_states': six.string_types,
 
@@ -1306,6 +1309,7 @@ DEFAULT_MINION_OPTS = {
     'state_top': 'top.sls',
     'state_top_saltenv': None,
     'startup_states': '',
+    'state_queue': False,
     'sls_list': [],
     'top_file': '',
     'thorium_interval': 0.5,
@@ -1909,6 +1913,7 @@ DEFAULT_MASTER_OPTS = {
     'auth_events': True,
     'minion_data_cache_events': True,
     'enable_ssh_minions': False,
+    'state_queue': False,
 }
 
 

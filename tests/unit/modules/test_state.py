@@ -603,8 +603,6 @@ class StateTestCase(TestCase, LoaderModuleMockMixin):
         '''
         mock = MagicMock(side_effect=["A", None])
         with patch.object(state, '_check_queue', mock):
-            self.assertRaises(AssertionError, state.show_lowstate)
-
             self.assertTrue(state.show_lowstate())
 
     def test_show_state_usage(self):

@@ -119,18 +119,6 @@ def _get_pillar_errors(kwargs, pillar=None):
     return None if kwargs.get('force') else (pillar or {}).get('_errors', __pillar__.get('_errors')) or None
 
 
-def _wait(jid):
-    '''
-    Wait for all previously started state jobs to finish running
-    '''
-    if jid is None:
-        jid = salt.utils.jid.gen_jid(__opts__)
-    states = _prior_running_states(jid)
-    while states:
-        time.sleep(1)
-        states = _prior_running_states(jid)
-
-
 def _snapper_pre(opts, jid):
     '''
     Create a snapper pre snapshot
@@ -407,11 +395,27 @@ def _prior_running_states(jid):
     return ret
 
 
+def _wait(jid):
+    '''
+    Wait for all previously started state jobs to finish running
+    '''
+    if jid is None:
+        jid = salt.utils.jid.gen_jid(__opts__)
+    states = _prior_running_states(jid)
+    while states:
+        time.sleep(1)
+        states = _prior_running_states(jid)
+
+
 def _check_queue(queue, kwargs):
     '''
     Utility function to queue the state run if requested
     and to check for conflicts in currently running states
     '''
+    # allow for an override, but default to configured default
+    if queue is None:
+        queue = __opts__.get('state_queue', False)
+
     if queue:
         _wait(kwargs.get('__pub_jid'))
     else:
@@ -427,7 +431,7 @@ def _get_initial_pillar(opts):
         else None
 
 
-def low(data, queue=False, **kwargs):
+def low(data, queue=None, **kwargs):
     '''
     Execute a single low data call
 
@@ -476,7 +480,7 @@ def _get_test_value(test=None, **kwargs):
     return ret
 
 
-def high(data, test=None, queue=False, **kwargs):
+def high(data, test=None, queue=None, **kwargs):
     '''
     Execute the compound calls stored in a single set of high data
 
@@ -523,7 +527,7 @@ def high(data, test=None, queue=False, **kwargs):
     return ret
 
 
-def template(tem, queue=False, **kwargs):
+def template(tem, queue=None, **kwargs):
     '''
     Execute the information stored in a template file on the minion.
 
@@ -575,7 +579,7 @@ def template(tem, queue=False, **kwargs):
     return ret
 
 
-def template_str(tem, queue=False, **kwargs):
+def template_str(tem, queue=None, **kwargs):
     '''
     Execute the information stored in a string from an sls template
 
@@ -903,7 +907,7 @@ def run_request(name='default', **kwargs):
     return {}
 
 
-def highstate(test=None, queue=False, **kwargs):
+def highstate(test=None, queue=None, **kwargs):
     '''
     Retrieve the state data from the salt master for this minion and execute it
 
@@ -1077,7 +1081,7 @@ def highstate(test=None, queue=False, **kwargs):
     return ret
 
 
-def sls(mods, test=None, exclude=None, queue=False, sync_mods=None, **kwargs):
+def sls(mods, test=None, exclude=None, queue=None, sync_mods=None, **kwargs):
     '''
     Execute the states in one or more SLS files
 
@@ -1194,15 +1198,11 @@ def sls(mods, test=None, exclude=None, queue=False, sync_mods=None, **kwargs):
         # "env" is not supported; Use "saltenv".
         kwargs.pop('env')
 
-    # Modification to __opts__ lost after this if-else
-    if queue:
-        _wait(kwargs.get('__pub_jid'))
-    else:
-        conflict = running(concurrent)
-        if conflict:
-            __context__['retcode'] = 1
-            return conflict
+    conflict = _check_queue(queue, kwargs)
+    if conflict is not None:
+        return conflict
 
+    # Modification to __opts__ lost after this if-else
     if isinstance(mods, list):
         disabled = _disabled(mods)
     else:
@@ -1358,7 +1358,7 @@ def sls(mods, test=None, exclude=None, queue=False, sync_mods=None, **kwargs):
     return ret
 
 
-def top(topfn, test=None, queue=False, **kwargs):
+def top(topfn, test=None, queue=None, **kwargs):
     '''
     Execute a specific top file instead of the default. This is useful to apply
     configurations from a different environment (for example, dev or prod), without
@@ -1449,7 +1449,7 @@ def top(topfn, test=None, queue=False, **kwargs):
     return ret
 
 
-def show_highstate(queue=False, **kwargs):
+def show_highstate(queue=None, **kwargs):
     '''
     Retrieve the highstate data from the salt master and display it
 
@@ -1501,7 +1501,7 @@ def show_highstate(queue=False, **kwargs):
     return ret
 
 
-def show_lowstate(queue=False, **kwargs):
+def show_lowstate(queue=None, **kwargs):
     '''
     List out the low data that will be applied to this minion
 
@@ -1513,7 +1513,6 @@ def show_lowstate(queue=False, **kwargs):
     '''
     conflict = _check_queue(queue, kwargs)
     if conflict is not None:
-        assert False
         return conflict
 
     opts = salt.utils.state.get_sls_opts(__opts__, __pillar__, **kwargs)
@@ -1538,7 +1537,7 @@ def show_lowstate(queue=False, **kwargs):
     return ret
 
 
-def show_state_usage(queue=False, **kwargs):
+def show_state_usage(queue=None, **kwargs):
     '''
     Retrieve the highstate data from the salt master to analyse used and unused states
 
@@ -1574,7 +1573,7 @@ def show_state_usage(queue=False, **kwargs):
     return ret
 
 
-def sls_id(id_, mods, test=None, queue=False, **kwargs):
+def sls_id(id_, mods, test=None, queue=None, **kwargs):
     '''
     Call a single ID from the named module(s) and handle all requisites
 
@@ -1694,7 +1693,7 @@ def sls_id(id_, mods, test=None, queue=False, **kwargs):
     return ret
 
 
-def show_low_sls(mods, test=None, queue=False, **kwargs):
+def show_low_sls(mods, test=None, queue=None, **kwargs):
     '''
     Display the low data from a specific sls. The default environment is
     ``base``, use ``saltenv`` to specify a different environment.
@@ -1787,7 +1786,7 @@ def show_low_sls(mods, test=None, queue=False, **kwargs):
     return ret
 
 
-def show_sls(mods, test=None, queue=False, **kwargs):
+def show_sls(mods, test=None, queue=None, **kwargs):
     '''
     Display the state data from a specific sls or list of sls files on the
     master. The default environment is ``base``, use ``saltenv`` to specify a
@@ -1875,7 +1874,7 @@ def show_sls(mods, test=None, queue=False, **kwargs):
     return high_
 
 
-def show_top(queue=False, **kwargs):
+def show_top(queue=None, **kwargs):
     '''
     Return the top data that the minion will use for a highstate
 
@@ -1916,7 +1915,7 @@ def show_top(queue=False, **kwargs):
     return matches
 
 
-def single(fun, name, test=None, queue=False, **kwargs):
+def single(fun, name, test=None, queue=None, **kwargs):
     '''
     Execute a single state function with the named kwargs, returns False if
     insufficient data is sent to the command
