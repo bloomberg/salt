@@ -17,13 +17,13 @@ from tests.support.mock import (
 )
 
 # Import Salt Libs
-import salt.modules.rpm as rpm
+import salt.modules.rpm_lowpkg as rpm
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)
 class RpmTestCase(TestCase, LoaderModuleMockMixin):
     '''
-    Test cases for salt.modules.rpm
+    Test cases for salt.modules.rpm_lowpkg
     '''
     def setup_loader_modules(self):
         return {rpm: {'rpm': MagicMock(return_value=MagicMock)}}
@@ -117,8 +117,8 @@ class RpmTestCase(TestCase, LoaderModuleMockMixin):
 
         :return:
         '''
-        with patch('salt.modules.rpm.rpm.labelCompare', MagicMock(return_value=0)), \
-                patch('salt.modules.rpm.HAS_RPM', True):
+        with patch('salt.modules.rpm_lowpkg.rpm.labelCompare', MagicMock(return_value=0)), \
+                patch('salt.modules.rpm_lowpkg.HAS_RPM', True):
             self.assertEqual(0, rpm.version_cmp('1', '2'))  # mock returns 0, which means RPM was called
 
     def test_version_cmp_fallback(self):
@@ -127,6 +127,6 @@ class RpmTestCase(TestCase, LoaderModuleMockMixin):
 
         :return:
         '''
-        with patch('salt.modules.rpm.rpm.labelCompare', MagicMock(return_value=0)), \
-                patch('salt.modules.rpm.HAS_RPM', False):
+        with patch('salt.modules.rpm_lowpkg.rpm.labelCompare', MagicMock(return_value=0)), \
+                patch('salt.modules.rpm_lowpkg.HAS_RPM', False):
             self.assertEqual(-1, rpm.version_cmp('1', '2'))  # mock returns -1, a python implementation was called

@@ -15,7 +15,7 @@ from tests.support.mock import (
     patch)
 
 # Import Salt Libs
-import salt.modules.smf as smf
+import salt.modules.smf_service as smf
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)

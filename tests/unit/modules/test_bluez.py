@@ -17,7 +17,7 @@ from tests.support.mock import (
 )
 
 # Import Salt Libs
-import salt.modules.bluez as bluez
+import salt.modules.bluez_bluetooth as bluez
 from salt.exceptions import CommandExecutionError
 import salt.utils.validate.net
 
