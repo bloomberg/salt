@@ -20,10 +20,6 @@ import salt.config
 # Import third party libs
 from salt.ext import six
 
-import pprint
-pprint.pprint("HERE")
-pprint.pprint(virt.HAS_LIBVIRT)
-
 
 @skipIf(not virt.HAS_LIBVIRT, 'these tests need libvirt')
 @skipIf(NO_MOCK, NO_MOCK_REASON)
