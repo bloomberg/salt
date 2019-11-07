@@ -377,6 +377,9 @@ class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
         cli_output = self.outputters['nested'](obj)
         return ansi2html.Ansi2HTMLConverter().convert(cli_output)
 
+    def _raw_dump(self, obj, **kwargs):
+        return self.outputters['nested'](obj) + "\n"
+
     def _verify_client(self, low):
         '''
         Verify that the client is in fact one we have
@@ -395,6 +398,7 @@ class BaseSaltAPIHandler(tornado.web.RequestHandler):  # pylint: disable=W0223
         self.ct_out_map = [
             ('application/json', _json_dumps),
             ('application/x-yaml', salt.utils.yaml.safe_dump),
+            ('application/x-ansi', self._raw_dump),
         ]
 
         # ansi2html is an optional dependency
