@@ -747,7 +747,8 @@ class SaltAuthHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
         '''
         try:
             if not isinstance(self.request_payload, dict):
-                self.send_error(400)
+                self.set_status(400)
+                self.write(self.serialize({"status": "400 Bad Request", "return": "Please log in"}))
                 return
 
             creds = {'username': self.request_payload['username'],
@@ -757,14 +758,15 @@ class SaltAuthHandler(BaseSaltAPIHandler):  # pylint: disable=W0223
                      }
         # if any of the args are missing, its a bad request
         except KeyError:
-            self.send_error(400)
+            self.set_status(400)
+            self.write(self.serialize({"status": "400 Bad Request", "return": "Please log in"}))
             return
 
         token = self.application.auth.mk_token(creds)
 
         if 'token' not in token or 'error' in token:
+            self.set_status(401)
             self.write(self.serialize(token))
-            self.send_error(401)
             # return since we don't want to execute any more
             return
 
