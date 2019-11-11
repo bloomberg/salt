@@ -854,7 +854,7 @@ def grains(opts, force_refresh=False, proxy=None):
                     import salt.modules.cmdmod
                     # Make sure cache file isn't read-only
                     salt.modules.cmdmod._run_quiet('attrib -R "{0}"'.format(cfn))
-                with salt.utils.files.flopen(cfn, 'w+b') as fp_:
+                with salt.utils.files.fopen(cfn, 'w+b') as fp_:
                     try:
                         serial = salt.payload.Serial(opts)
                         serial.dump(grains_data, fp_)
