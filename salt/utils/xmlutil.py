@@ -27,7 +27,7 @@ def _to_dict(xmltree):
     '''
     # If this object has no children, the for..loop below will return nothing
     # for it, so just return a single dict representing it.
-    if len(list(xmltree.getchildren())) < 1:
+    if len(list(xmltree)) < 1:
         name = _conv_name(xmltree.tag)
         return {name: xmltree.text}
 
@@ -36,7 +36,7 @@ def _to_dict(xmltree):
         name = _conv_name(item.tag)
 
         if name not in xmldict:
-            if len(list(item.getchildren())) > 0:
+            if len(list(item)) > 0:
                 xmldict[name] = _to_dict(item)
             else:
                 xmldict[name] = item.text
