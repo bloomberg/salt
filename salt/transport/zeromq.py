@@ -1044,7 +1044,7 @@ class ZeroMQPubServerChannel(salt.transport.server.PubServerChannel):
 
         # If zmq_filtering is enabled, target matching has to happen master side
         match_targets = ["pcre", "glob", "list"]
-        if self.opts['zmq_filtering'] and load['tgt_type'] in match_targets:
+        if self.opts['zmq_filtering'] and (load['tgt_type'] in match_targets or self.opts['cache'] == 'pgjsonb'):
             # Fetch a list of minions that match
             _res = self.ckminions.check_minions(load['tgt'],
                                                 tgt_type=load['tgt_type'])
