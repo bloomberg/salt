@@ -28,6 +28,7 @@ import salt.utils.files
 import salt.utils.minions
 import salt.utils.process
 import salt.utils.stringutils
+from salt.utils.stringutils import to_bytes
 import salt.utils.verify
 import salt.utils.zeromq
 import salt.utils.versions
@@ -406,23 +407,22 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
             install_zmq()
             self.io_loop = ZMQDefaultLoop.current()
 
-        self.hexid = hashlib.sha1(salt.utils.stringutils.to_bytes(self.opts['id'])).hexdigest()
+        self.hexid = to_bytes(hashlib.sha1(to_bytes(self.opts['id'])).hexdigest())
         self.auth = salt.crypt.AsyncAuth(self.opts, io_loop=self.io_loop)
         self.serial = salt.payload.Serial(self.opts)
         self.context = zmq.Context()
         self._socket = self.context.socket(zmq.SUB)
 
         if self.opts['zmq_filtering']:
-            # TODO: constants file for "broadcast"
             self._socket.setsockopt(zmq.SUBSCRIBE, b'broadcast')
             self._socket.setsockopt(
                 zmq.SUBSCRIBE,
-                salt.utils.stringutils.to_bytes(self.hexid)
+                self.hexid
             )
         else:
             self._socket.setsockopt(zmq.SUBSCRIBE, b'')
 
-        self._socket.setsockopt(zmq.IDENTITY, salt.utils.stringutils.to_bytes(self.opts['id']))
+        self._socket.setsockopt(zmq.IDENTITY, to_bytes(self.opts['id']))
 
         # TODO: cleanup all the socket opts stuff
         if hasattr(zmq, 'TCP_KEEPALIVE'):
@@ -542,8 +542,8 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
             payload = self.serial.loads(messages[0])
         # 2 includes a header which says who should do it
         elif messages_len == 2:
-            if messages[0] not in ('broadcast', self.hexid):
-                log.debug('Publish received for not this minion: %s', messages[0])
+            if messages[0] not in (b'broadcast', self.hexid):
+                log.debug('Publish received for %s not this minion: %s', self.hexid, messages[0])
                 raise tornado.gen.Return(None)
             payload = self.serial.loads(messages[1])
         else:
@@ -939,7 +939,7 @@ class ZeroMQPubServerChannel(salt.transport.server.PubServerChannel):
                                 log.trace('Sending filtered data over publisher %s', pub_uri)
                                 # zmq filters are substring match, hash the topic
                                 # to avoid collisions
-                                htopic = hashlib.sha1(topic).hexdigest()
+                                htopic = to_bytes(hashlib.sha1(to_bytes(topic)).hexdigest())
                                 pub_sock.send(htopic, flags=zmq.SNDMORE)
                                 pub_sock.send(payload)
                                 log.trace('Filtered data has been sent')
@@ -947,7 +947,7 @@ class ZeroMQPubServerChannel(salt.transport.server.PubServerChannel):
                         else:
                             # TODO: constants file for "broadcast"
                             log.trace('Sending broadcasted data over publisher %s', pub_uri)
-                            pub_sock.send('broadcast', flags=zmq.SNDMORE)
+                            pub_sock.send(b'broadcast', flags=zmq.SNDMORE)
                             pub_sock.send(payload)
                             log.trace('Broadcasted data has been sent')
                     else:
@@ -1044,7 +1044,7 @@ class ZeroMQPubServerChannel(salt.transport.server.PubServerChannel):
 
         # If zmq_filtering is enabled, target matching has to happen master side
         match_targets = ["pcre", "glob", "list"]
-        if self.opts['zmq_filtering'] and load['tgt_type'] in match_targets:
+        if self.opts['zmq_filtering'] and (load['tgt_type'] in match_targets or self.opts['cache'] == 'pgjsonb'):
             # Fetch a list of minions that match
             _res = self.ckminions.check_minions(load['tgt'],
                                                 tgt_type=load['tgt_type'])
