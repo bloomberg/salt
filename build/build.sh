@@ -120,7 +120,7 @@ if [[ -z $_BbghToken && $_Prod == 1 ]]; then
 fi
 
 # Check post build tag is a number only on PROD. On dev we want to include build number aswell.
-if [[ ! -z $_PostBuildTag ]] && [[ ! $_PostBuildTag =~ ^[0-9]+$ ]] && [[ $_Prod -ne $TRUE ]]; then
+if [[ ! -z $_PostBuildTag ]] && [[ ! $_PostBuildTag =~ ^[0-9]+$ ]] && [[ $_Prod -eq $TRUE ]]; then
   echo "error: Post build tag is Not a number!" >&2
   exit 1
 fi

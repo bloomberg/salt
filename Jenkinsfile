@@ -21,7 +21,7 @@ pipeline {
         stage('Build') {
             when {changeRequest()}
             steps {
-                sh "bash ./build/build.sh -b ${env.CHANGE_ID}-${env.BUILD_ID}"
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${env.BUILD_ID}"
             }
         }
         stage('Run Upstream Salt Unit Tests') {
@@ -60,7 +60,7 @@ pipeline {
                 // Also push/override the original pr_number
                 //  |- If you want to install the latest dev build of a pr, just use pr number
                 retry(3) { // I have never seen this fail but adding retry logic just incase
-                    sh "bash ./build/build.sh -b ${env.CHANGE_ID}-${env.BUILD_ID} -k -s -u"
+                    sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${env.BUILD_ID} -k -s -u"
                     sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
                 }
             }
