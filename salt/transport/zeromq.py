@@ -231,7 +231,14 @@ class AsyncZeroMQReqChannel(salt.transport.client.ReqChannel):
             )
             return
 
-        log.debug('Closing %s instance', self.__class__.__name__)
+        # due to circular refs and cp.* (possibly other mods) using context to cache
+        # objects for speed, this can sometimes be firing during python teardown
+        # in salt-call where builtins start disappearing. if so, just ignore it.
+        try:
+            log.debug('Closing %s instance', self.__class__.__name__)
+        except NameError:
+            pass
+
         self._closing = True
         if hasattr(self, 'message_client'):
             self.message_client.close()
