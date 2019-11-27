@@ -7,19 +7,21 @@ pipeline {
         BBGH_TOKEN = credentials('bbgithub_token')
         PYPI_CREDENTIAL = credentials('salt_jenkins_ad_user_pass_escaped')
     }
+    triggers {
+        // Run once an hour between 2am-6am this pipeline will run on all salt prs but NOT master
+        // Run multiple times incase artifactory changes when they remove builds and also if there are any failures pushing to artifactory
+        cron(env.BRANCH_NAME == 'v2018.3.3-ca' ? '': '0 2-6 * * *')
+    }
     options {
         ansiColor('xterm')
-        // Currently builds take an hour and 30 minutes.
-        // If every executor is used, this will give enough time for the queue to pass and this build to run
-        // timeout(time: 3, unit: 'HOURS')
         // Keep up to 10 builds (artifacts/console output) from master and each branch retains up to 5 builds of that specific branch
-        buildDiscarder(logRotator(numToKeepStr: env.BRANCH_NAME == 'master' ? '10' : '5'))
+        buildDiscarder(logRotator(numToKeepStr: env.BRANCH_NAME == 'v2018.3.3-ca' ? '10' : '5'))
     }
     stages {
         stage('Build') {
             when {changeRequest()}
             steps {
-                sh 'bash ./build/build.sh -b $CHANGE_ID'
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}_${env.BUILD_ID}"
             }
         }
         stage('Run Upstream Salt Unit Tests') {
@@ -54,7 +56,13 @@ pipeline {
         stage('Deploy to dev pypi') {
             when {changeRequest()}
             steps {
-                sh 'bash ./build/build.sh -b $CHANGE_ID -k -s -u'
+                // This will build the dev pypi package as the (pr_number _ jenkins_build_number)
+                // Also push/override the original pr_number
+                //  |- If you want to install the latest dev build of a pr, just use pr number
+                retry(3) { // I have never seen this fail but adding retry logic just incase
+                    sh "bash ./build/build.sh -b ${env.CHANGE_ID}_${env.BUILD_ID} -k -s -u"
+                    sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
+                }
             }
         }
         stage('Deploy to ose pypi') {
