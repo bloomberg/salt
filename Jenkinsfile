@@ -8,9 +8,9 @@ pipeline {
         PYPI_CREDENTIAL = credentials('salt_jenkins_ad_user_pass_escaped')
     }
     triggers {
-        // Run once an hour between 2am-6am this pipeline will run on all salt prs but NOT master
+        // Run once an hour between 4am-5am this pipeline will run on all salt prs but NOT master
         // Run multiple times incase artifactory changes when they remove builds and also if there are any failures pushing to artifactory
-        cron(env.BRANCH_NAME == 'v2018.3.3-ca' ? '': '0 2-6 * * *')
+        cron(env.BRANCH_NAME == 'v2018.3.3-ca' ? '': '0 4-5 * * *')
     }
     options {
         ansiColor('xterm')
@@ -21,7 +21,7 @@ pipeline {
         stage('Build') {
             when {changeRequest()}
             steps {
-                sh "bash ./build/build.sh -b ${env.CHANGE_ID}_${env.BUILD_ID}"
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}-${env.BUILD_ID}"
             }
         }
         stage('Run Upstream Salt Unit Tests') {
@@ -60,7 +60,7 @@ pipeline {
                 // Also push/override the original pr_number
                 //  |- If you want to install the latest dev build of a pr, just use pr number
                 retry(3) { // I have never seen this fail but adding retry logic just incase
-                    sh "bash ./build/build.sh -b ${env.CHANGE_ID}_${env.BUILD_ID} -k -s -u"
+                    sh "bash ./build/build.sh -b ${env.CHANGE_ID}-${env.BUILD_ID} -k -s -u"
                     sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
                 }
             }
