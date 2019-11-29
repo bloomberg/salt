@@ -3,7 +3,8 @@ def image_name = "artprod.dev.bloomberg.com/bb-inf/salt-minion:2018.3.3"
 
 // Without this both env.CHANGE_ID 1 and 10 will both be .1
 // With change 1 will be .01 and 10 will be .1
-def change_id = (env.CHANGE_ID < 10) ? "0${env.CHANGE_ID}" : env.CHANGE_ID
+// CHANGE_ID is a string, but incase it changese to int I'm casting
+def change_id = (env.CHANGE_ID.toString().size() < 2) ? "0${env.CHANGE_ID}" : "${env.CHANGE_ID}"
 
 pipeline {
     agent { label 'syscore-salt'}
