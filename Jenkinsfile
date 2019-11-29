@@ -1,6 +1,10 @@
 def unique_container_name = "unit-tests-${env.BUILD_ID}${env.JOB_NAME.replace("/", "-")}"
 def image_name = "artprod.dev.bloomberg.com/bb-inf/salt-minion:2018.3.3"
 
+// Without this both env.CHANGE_ID 1 and 10 will both be .1
+// With change 1 will be .01 and 10 will be .1
+def change_id = (env.CHANGE_ID < 10) ? "0${env.CHANGE_ID}" : env.CHANGE_ID
+
 pipeline {
     agent { label 'syscore-salt'}
     environment {
@@ -21,7 +25,7 @@ pipeline {
         stage('Build') {
             when {changeRequest()}
             steps {
-                sh "bash ./build/build.sh -b ${env.CHANGE_ID}"
+                sh "bash ./build/build.sh -b ${change_id}"
             }
         }
         stage('Run Upstream Salt Unit Tests') {
@@ -60,7 +64,7 @@ pipeline {
                 // Also push/override the original pr_number
                 //  |- If you want to install the latest dev build of a pr, just use pr number
                 sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
-                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${env.BUILD_ID} -k -u"  // no -s so we build
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${change_id} -k -u"  // no -s so we build
             }
         }
         stage('Deploy to ose pypi') {
