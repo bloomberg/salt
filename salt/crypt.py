@@ -774,6 +774,8 @@ class AsyncAuth(object):
                 if salt.utils.crypt.pem_finger(m_pub_fn, sum_type=self.opts['hash_type']) != self.opts['master_finger']:
                     self._finger_fail(self.opts['master_finger'], m_pub_fn)
         auth['publish_port'] = payload['publish_port']
+        auth['zmq_filtering'] = payload.get('zmq_filtering', False)
+
         raise tornado.gen.Return(auth)
 
     def get_keys(self):
