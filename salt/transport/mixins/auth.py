@@ -443,6 +443,7 @@ class AESReqServerMixin(object):
             cipher = PKCS1_OAEP.new(pub)
         ret = {'enc': 'pub',
                'pub_key': self.master_key.get_pub_str(),
+               'zmq_filtering': self.opts['zmq_filtering'],
                'publish_port': self.opts['publish_port']}
 
         # sign the master's pubkey (if enabled) before it is

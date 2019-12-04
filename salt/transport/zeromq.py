@@ -231,7 +231,14 @@ class AsyncZeroMQReqChannel(salt.transport.client.ReqChannel):
             )
             return
 
-        log.debug('Closing %s instance', self.__class__.__name__)
+        # due to circular refs and cp.* (possibly other mods) using context to cache
+        # objects for speed, this can sometimes be firing during python teardown
+        # in salt-call where builtins start disappearing. if so, just ignore it.
+        try:
+            log.debug('Closing %s instance', self.__class__.__name__)
+        except NameError:
+            pass
+
         self._closing = True
         if hasattr(self, 'message_client'):
             self.message_client.close()
@@ -413,14 +420,7 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
         self.context = zmq.Context()
         self._socket = self.context.socket(zmq.SUB)
 
-        if self.opts['zmq_filtering']:
-            self._socket.setsockopt(zmq.SUBSCRIBE, b'broadcast')
-            self._socket.setsockopt(
-                zmq.SUBSCRIBE,
-                self.hexid
-            )
-        else:
-            self._socket.setsockopt(zmq.SUBSCRIBE, b'')
+        self.zmq_filtering = self.opts['zmq_filtering']
 
         self._socket.setsockopt(zmq.IDENTITY, to_bytes(self.opts['id']))
 
@@ -516,8 +516,40 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
         else:
             self.publish_port = self.auth.creds['publish_port']
 
+        # we use cred return to relay zmq_filtering opt similar to publish_port
+        if 'zmq_filtering' in self.auth.creds:
+            self.zmq_filtering = self.auth.creds['zmq_filtering']
+
         log.debug('Connecting the Minion to the Master publish port, using the URI: %s', self.master_pub)
         self._socket.connect(self.master_pub)
+
+    @property
+    def zmq_filtering(self):
+        '''
+        Return if this channel is enabled for zmq_filtering
+        '''
+        return self._zmq_filtering
+
+    @zmq_filtering.setter
+    def zmq_filtering(self, value):
+        '''
+        turn filtering on/off for a given channel
+        '''
+        if hasattr(self, 'zmq_filtering') and self.zmq_filtering == value:
+            return
+
+        self._zmq_filtering = value
+
+        if self._zmq_filtering:
+            log.debug('zmq_filltering was disabled, enabling')
+            self._socket.setsockopt(zmq.UNSUBSCRIBE, b'')
+            self._socket.setsockopt(zmq.SUBSCRIBE, b'broadcast')
+            self._socket.setsockopt(zmq.SUBSCRIBE, self.hexid)
+        else:
+            log.debug('zmq_filltering was enabled, disabling')
+            self._socket.setsockopt(zmq.UNSUBSCRIBE, b'broadcast')
+            self._socket.setsockopt(zmq.UNSUBSCRIBE, self.hexid)
+            self._socket.setsockopt(zmq.SUBSCRIBE, b'')
 
     @property
     def master_pub(self):

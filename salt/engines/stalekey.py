@@ -47,7 +47,7 @@ def __virtual__():
 def _get_keys():
     keys = salt.key.get_key(__opts__)
     minions = keys.all_keys()
-    return [six.ensure_str(minion) for minion in minions['minions']]
+    return [six.ensure_binary(minion) for minion in minions['minions']]
 
 
 def start(interval=3600, expire=604800):
