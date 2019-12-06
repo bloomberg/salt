@@ -381,6 +381,28 @@ class SyncClientMixin(object):
             data['pid'] = os.getpid()
             with salt.utils.files.fopen(jid_proc_file, 'w+b') as fp_:
                 fp_.write(serial.dumps(data))
+
+            if self.store_job:
+                try:
+                    salt.utils.job.store_job(
+                        self.opts,
+                        {
+                            'id': self.opts['id'],
+                            'tgt': self.opts['id'],
+                            'jid': data['jid'],
+                            'user': data['user'],
+                            'fun': data['fun'],
+                            'pid': data['pid'],
+                            'arg': args + [kwargs],
+                        },
+                        event=None,
+                        mminion=self.mminion,
+                        prep_pub=True,
+                        )
+                except salt.exceptions.SaltCacheError:
+                    log.error('Could not store job cache info. '
+                              'Job details for this run may be unavailable.')
+
             del data['pid']
 
             # Initialize a context for executing the method.
@@ -419,10 +441,14 @@ class SyncClientMixin(object):
                         'id': self.opts['id'],
                         'tgt': self.opts['id'],
                         'jid': data['jid'],
+                        'user': data['user'],
+                        'fun': data['fun'],
+                        'arg': args + [kwargs],
                         'return': data,
                     },
                     event=None,
                     mminion=self.mminion,
+                    prep_pub=False
                     )
             except salt.exceptions.SaltCacheError:
                 log.error('Could not store job cache info. '

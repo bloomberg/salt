@@ -16,9 +16,11 @@ import salt.utils.verify
 log = logging.getLogger(__name__)
 
 
-def store_job(opts, load, event=None, mminion=None):
+def store_job(opts, load, event=None, mminion=None, prep_pub=False):
     '''
     Store job information using the configured master_job_cache
+    when prep_pub is true, save_load is the storage mechanism
+    when prep_pub is false, returner is used instead
     '''
     # Generate EndTime
     endtime = salt.utils.jid.jid_to_time(salt.utils.jid.gen_jid(opts))
@@ -105,7 +107,7 @@ def store_job(opts, load, event=None, mminion=None):
 
     if 'arg' not in load:
         if 'fun_args' in load:
-            load['arg'] = load['fun_args']
+            load['arg'] = load.pop('fun_args')
         elif isinstance(load.get('return', {}), dict) and load.get('return', {}).get('fun_args'):
             load['arg'] = load['return']['fun_args']
         else:
@@ -129,28 +131,29 @@ def store_job(opts, load, event=None, mminion=None):
         log.error(emsg)
         raise KeyError(emsg)
 
-    try:
-        mminion.returners[savefstr](load['jid'], load)
-    except KeyError as e:
-        log.error("Load does not contain 'jid': %s", e)
-    except Exception:
-        log.critical(
-            "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
-            exc_info=True
-        )
+    if prep_pub:
+        try:
+            mminion.returners[savefstr](load['jid'], load)
+        except KeyError as e:
+            log.error("Load does not contain 'jid': %s", e)
+        except Exception:
+            log.critical(
+                "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
+                exc_info=True
+            )
+    else:
+        try:
+            load['return'] = ret_
+            mminion.returners[fstr](load)
+        except Exception:
+            log.critical(
+                "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
+                exc_info=True
+            )
 
-    try:
-        load['return'] = ret_
-        mminion.returners[fstr](load)
-    except Exception:
-        log.critical(
-            "The specified '{0}' returner threw a stack trace:\n".format(job_cache),
-            exc_info=True
-        )
-
-    if (opts.get('job_cache_store_endtime')
-            and updateetfstr in mminion.returners):
-        mminion.returners[updateetfstr](load['jid'], endtime)
+        if (opts.get('job_cache_store_endtime')
+                and updateetfstr in mminion.returners):
+            mminion.returners[updateetfstr](load['jid'], endtime)
 
 
 def store_minions(opts, jid, minions, mminion=None, syndic_id=None):
