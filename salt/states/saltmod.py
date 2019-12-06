@@ -310,10 +310,15 @@ def state(name,
 
     cmd_kw['tgt_type'] = tgt_type
     cmd_kw['ssh'] = ssh
+
     if 'roster' in kwargs:
         cmd_kw['roster'] = kwargs['roster']
+
     cmd_kw['expect_minions'] = expect_minions
-    cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
+    if 'asynchronous' in kwargs:
+        cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
     if highstate:
         fun = 'state.highstate'
     elif top:
