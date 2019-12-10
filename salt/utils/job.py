@@ -16,7 +16,7 @@ import salt.utils.verify
 log = logging.getLogger(__name__)
 
 
-def store_job(opts, load, event=None, mminion=None, prep_pub=False):
+def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False):
     '''
     Store job information using the configured master_job_cache
     when prep_pub is true, save_load is the storage mechanism
@@ -25,12 +25,28 @@ def store_job(opts, load, event=None, mminion=None, prep_pub=False):
     # Generate EndTime
     endtime = salt.utils.jid.jid_to_time(salt.utils.jid.gen_jid(opts))
     # If the return data is invalid, just ignore it
-    if any(key not in load for key in ('return', 'jid', 'id')):
-        return False
-    if not salt.utils.verify.valid_id(opts, load['id']):
-        return False
+    if prep_pub:
+        if 'jid' not in load:
+            return False
+    else:
+        if any(key not in load for key in ('jid', 'id', 'return')):
+            return False
+        if not salt.utils.verify.valid_id(opts, load['id']):
+            return False
     if mminion is None:
         mminion = salt.minion.MasterMinion(opts, states=False, rend=False)
+
+    # remove some redundant data
+    fun_args = None
+    if 'fun_args' in load:
+        fun_args = load.pop('fun_args')
+    if isinstance(load.get('return', {}), dict) and 'fun_args' in load.get('return', {}):
+        fun_args = load['return'].pop('fun_args')
+
+    load.setdefault('arg', fun_args)
+
+    # finally condition it to be uniform
+    load['arg'] = salt.utils.args.parse_input(load['arg'], condition=True)
 
     job_cache = opts['master_job_cache']
     if load['jid'] == 'req':
@@ -104,23 +120,6 @@ def store_job(opts, load, event=None, mminion=None, prep_pub=False):
     fstr = '{0}.returner'.format(job_cache)
     updateetfstr = '{0}.update_endtime'.format(job_cache)
 
-
-    if 'arg' not in load:
-        if 'fun_args' in load:
-            load['arg'] = load.pop('fun_args')
-        elif isinstance(load.get('return', {}), dict) and load.get('return', {}).get('fun_args'):
-            load['arg'] = load['return']['fun_args']
-        else:
-            pass
-
-    ret_ = load.pop('return', {})
-
-    if 'fun' not in load and ret_:
-        if 'fun' in ret_:
-            load.update({'fun': ret_['fun']})
-        if 'user' in ret_:
-            load.update({'user': ret_['user']})
-
     # Try to reach returner methods
     try:
         savefstr_func = mminion.returners[savefstr]
@@ -133,7 +132,10 @@ def store_job(opts, load, event=None, mminion=None, prep_pub=False):
 
     if prep_pub:
         try:
-            mminion.returners[savefstr](load['jid'], load)
+            if minions:
+                mminion.returners[savefstr](load['jid'], load, minions)
+            else:
+                mminion.returners[savefstr](load['jid'], load)
         except KeyError as e:
             log.error("Load does not contain 'jid': %s", e)
         except Exception:
@@ -143,6 +145,14 @@ def store_job(opts, load, event=None, mminion=None, prep_pub=False):
             )
     else:
         try:
+            ret_ = load.pop('return', {})
+
+            if 'fun' not in load and ret_:
+                if 'fun' in ret_:
+                    load.update({'fun': ret_['fun']})
+                if 'user' in ret_:
+                    load.update({'user': ret_['user']})
+
             load['return'] = ret_
             mminion.returners[fstr](load)
         except Exception:
