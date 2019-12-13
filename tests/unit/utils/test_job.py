@@ -57,5 +57,5 @@ class JobTest(TestCase):
                  patch.dict(MockMasterMinion.returners, {func: raise_exception}), \
                  patch('salt.utils.verify.valid_id', return_value=True):
                  with self.assertLogs('salt.utils.job', level='CRITICAL') as logged:
-                    job.store_job(MockMasterMinion.opts, {'jid': '20190618090114890985', 'return': {'success': True}, 'id': 'a'})
+                    job.store_job(MockMasterMinion.opts, {'jid': '20190618090114890985', 'return': {'success': True}, 'id': 'a'}, prep_pub=(func == 'foo.save_load'))
                     self.assertIn("The specified 'foo' returner threw a stack trace", logged.output[0])

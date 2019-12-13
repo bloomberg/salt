@@ -37,7 +37,7 @@ def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False
         mminion = salt.minion.MasterMinion(opts, states=False, rend=False)
 
     # remove some redundant data
-    fun_args = None
+    fun_args = []
     if 'fun_args' in load:
         fun_args = load.pop('fun_args')
     if isinstance(load.get('return', {}), dict) and 'fun_args' in load.get('return', {}):
@@ -145,6 +145,8 @@ def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False
             )
     else:
         try:
+            import pprint; pprint.pprint("HERE")
+            import pprint; pprint.pprint(load)
             ret_ = load.pop('return', {})
 
             if 'fun' not in load and ret_:
@@ -154,6 +156,8 @@ def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False
                     load.update({'user': ret_['user']})
 
             load['return'] = ret_
+            import pprint; pprint.pprint(mminion.returners[fstr])
+            import pprint; pprint.pprint(mminion.returners[fstr]())
             mminion.returners[fstr](load)
         except Exception:
             log.critical(
