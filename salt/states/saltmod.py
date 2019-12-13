@@ -403,7 +403,7 @@ def state(name,
                 isinstance(tmp_ret, dict) else 'highstate'
         }}
 
-    if cmd_kw['asynchronous']:
+    if cmd_kw.get('asynchronous', False):
         state_ret['__jid__'] = cmd_ret.get('jid')
         state_ret['changes'] = cmd_ret
         if int(cmd_ret.get('jid', 0)) > 0:
@@ -598,7 +598,9 @@ def function(
     cmd_kw['ssh'] = ssh
     cmd_kw['expect_minions'] = expect_minions
     cmd_kw['_cmd_meta'] = True
-    cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
+    if 'asynchronous' in kwargs:
+        cmd_kw['asynchronous'] = kwargs.pop('asynchronous')
 
     if failhard is True or __opts__.get('failhard'):
         cmd_kw['failhard'] = True
@@ -635,7 +637,7 @@ def function(
         func_ret['comment'] = six.text_type(exc)
         return func_ret
 
-    if cmd_kw['asynchronous']:
+    if cmd_kw.get('asynchronous'):
         func_ret['__jid__'] = cmd_ret.get('jid')
         func_ret['changes'] = cmd_ret
         if int(cmd_ret.get('jid', 0)) > 0:
