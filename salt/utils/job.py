@@ -145,8 +145,6 @@ def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False
             )
     else:
         try:
-            import pprint; pprint.pprint("HERE")
-            import pprint; pprint.pprint(load)
             ret_ = load.pop('return', {})
 
             if 'fun' not in load and ret_:
@@ -156,8 +154,6 @@ def store_job(opts, load, event=None, mminion=None, minions=None, prep_pub=False
                     load.update({'user': ret_['user']})
 
             load['return'] = ret_
-            import pprint; pprint.pprint(mminion.returners[fstr])
-            import pprint; pprint.pprint(mminion.returners[fstr]())
             mminion.returners[fstr](load)
         except Exception:
             log.critical(
