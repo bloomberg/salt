@@ -389,6 +389,7 @@ class SyncClientMixin(object):
                         {
                             'id': self.opts['id'],
                             'tgt': self.opts['id'],
+                            'tgt_type': 'list',
                             'jid': data['jid'],
                             'user': data['user'],
                             'fun': data['fun'],
@@ -440,6 +441,7 @@ class SyncClientMixin(object):
                     {
                         'id': self.opts['id'],
                         'tgt': self.opts['id'],
+                        'tgt_type': 'list',
                         'jid': data['jid'],
                         'user': data['user'],
                         'fun': data['fun'],
