@@ -388,33 +388,22 @@ def save_load(jid, load, minions=None):
     '''
     Save the load to the specified jid id
     '''
+    if not minions:
+        minions = []
 
     with _get_serv(commit=True) as cur:
 
         # if the database is down we need to hint that on conflict is to be used
         if (cur.connection.server_version is not None and cur.connection.server_version >= 90500) or _options.get('on_conflict'):
-            if minions:
-                sql = '''INSERT INTO jids
-                                      (jid, load, minions)
-                                      VALUES (%(jid)s, %(load)s, %(minions)s)
-                                      ON CONFLICT (jid) DO NOTHING'''
-            else:
-                sql = '''INSERT INTO jids
-                                      (jid, load)
-                                      VALUES (%(jid)s, %(load)s)
-                                      ON CONFLICT (jid) DO NOTHING'''
+            sql = '''INSERT INTO jids
+                                  (jid, load, minions)
+                                  VALUES (%(jid)s, %(load)s, %(minions)s)
+                                  ON CONFLICT (jid) DO NOTHING'''
         else:
-            if minions:
-
-                sql = '''INSERT INTO jids (jid, load, minions) VALUES (%(jid)s, %(load)s, %(minions)s)'''
-            else:
-                sql = '''INSERT INTO jids (jid, load) VALUES (%(jid)s, %(load)s)'''
+            sql = '''INSERT INTO jids (jid, load, minions) VALUES (%(jid)s, %(load)s, %(minions)s)'''
 
         try:
-            values = {'jid': jid, 'load': psycopg2.extras.Json(load)}
-
-            if minions:
-                values['minions'] = minions
+            values = {'jid': jid, 'load': psycopg2.extras.Json(load), 'minions': minions}
 
             cur.execute(sql, values)
         except psycopg2.IntegrityError:
