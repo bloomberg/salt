@@ -259,7 +259,13 @@ class Runner(RunnerClient):
 
             # Run the runner!
             if self.opts.get('async', False):
-                async_pub = self.cmd_async(low)
+                if self.opts.get('local'):
+                    async_pub = self.asynchronous(self.opts['fun'],
+                                                  low,
+                                                  user=user,
+                                                  pub=async_pub)
+                else:
+                    async_pub = self.cmd_async(low)
                 # by default: info will be not enough to be printed out !
                 log.warning(
                     'Running in asynchronous mode. Results of this execution may '

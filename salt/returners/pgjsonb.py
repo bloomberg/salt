@@ -88,11 +88,13 @@ Use the following Pg database schema:
     DROP TABLE IF EXISTS jids;
     CREATE TABLE jids (
        jid varchar(255) NOT NULL primary key,
+       minions text[] default ARRAY[]::text[],
        load jsonb NOT NULL
     );
     CREATE INDEX idx_jids_jsonb on jids
            USING gin (load)
            WITH (fastupdate=on);
+    CREATE INDEX idx_minions ON jids USING GIN(minions);
 
     --
     -- Table structure for table `salt_returns`
@@ -178,7 +180,10 @@ from salt.ext import six
 try:
     import psycopg2
     import psycopg2.extras
+    from psycopg2.extras import Json
     import psycopg2.extensions
+    from psycopg2 import sql
+    from psycopg2.sql import SQL, Identifier, Literal
     logging.getLogger('persistqueue.common').setLevel(logging.ERROR)
     import persistqueue
     HAS_PG = True
@@ -190,8 +195,6 @@ log = logging.getLogger(__name__)
 # Define the module's virtual name
 __virtualname__ = 'pgjsonb'
 
-PG_SAVE_LOAD_SQL = '''INSERT INTO jids (jid, load) VALUES (%(jid)s, %(load)s)'''
-
 
 # need a stub connection in cases where we can't connect at all to the database
 class PersistentFailureConn():
@@ -201,7 +204,7 @@ class PersistentFailureConn():
         pass
 
 
-class PersistentFailureCursor(psycopg2.extensions.cursor):
+class PersistentFailureCursor(psycopg2.extras.LoggingCursor):
     queue_options = None
 
     def __init__(self, *args, **kwargs):
@@ -220,7 +223,7 @@ class PersistentFailureCursor(psycopg2.extensions.cursor):
 
     def execute(self, sql, args=None):
         try:
-            psycopg2.extensions.cursor.execute(self, sql, args)
+            super(PersistentFailureCursor, self).execute(sql, args)
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
             if re.match('^INSERT|UPDATE', sql, re.I):
                 log.info("PersistentFailureCursor: caught psycopg2.OperationalError/psycopg2.InterfaceError on INSERT, saving for later re-attempt")
@@ -316,8 +319,10 @@ def _get_serv(ret=None, commit=False):
             dbname=_options.get('db'),
             user=_options.get('user'),
             password=_options.get('pass'),
+            connection_factory=psycopg2.extras.LoggingConnection,
             **ssl_options
         )
+        conn.initialize(log)
 
         if _options.get('persistqueue'):
             cursor = conn.cursor(cursor_factory=PersistentFailureCursor)
@@ -327,13 +332,6 @@ def _get_serv(ret=None, commit=False):
         cursor = PersistentFailureCursor(ret=ret, stub=True)
         conn = PersistentFailureConn()
 
-    # if the database is down we need to hint that on conflict is to be used
-    if (conn.server_version is not None and conn.server_version >= 90500) or _options.get('on_conflict'):
-        global PG_SAVE_LOAD_SQL
-        PG_SAVE_LOAD_SQL = '''INSERT INTO jids
-                              (jid, load)
-                              VALUES (%(jid)s, %(load)s)
-                              ON CONFLICT (jid) DO NOTHING'''
     try:
         yield cursor
     except psycopg2.DatabaseError as err:
@@ -390,10 +388,24 @@ def save_load(jid, load, minions=None):
     '''
     Save the load to the specified jid id
     '''
+    if not minions:
+        minions = []
+
     with _get_serv(commit=True) as cur:
+
+        # if the database is down we need to hint that on conflict is to be used
+        if (cur.connection.server_version is not None and cur.connection.server_version >= 90500) or _options.get('on_conflict'):
+            sql = '''INSERT INTO jids
+                                  (jid, load, minions)
+                                  VALUES (%(jid)s, %(load)s, %(minions)s)
+                                  ON CONFLICT (jid) DO NOTHING'''
+        else:
+            sql = '''INSERT INTO jids (jid, load, minions) VALUES (%(jid)s, %(load)s, %(minions)s)'''
+
         try:
-            cur.execute(PG_SAVE_LOAD_SQL,
-                        {'jid': jid, 'load': psycopg2.extras.Json(load)})
+            values = {'jid': jid, 'load': psycopg2.extras.Json(load), 'minions': minions}
+
+            cur.execute(sql, values)
         except psycopg2.IntegrityError:
             # https://github.com/saltstack/salt/issues/22171
             # Without this try/except we get tons of duplicate entry errors

@@ -1642,7 +1642,10 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
         low['eauth_opts'] = eauth_opts
 
     if masterless or local or recursive:
-        return rclient.cmd(name, arg=arg, kwarg=kwarg, print_event=False, full_return=full_return)
+        if asynchronous:
+            ret = rclient.asynchronous(low['fun'], low, user=low.get('user'))
+        else:
+            ret = rclient.cmd(name, arg=arg, kwarg=kwarg, print_event=False, full_return=full_return)
     else:
         # these differ from what is provided by kwarg
         # these are the currently executing user credentials
@@ -1656,7 +1659,7 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
             ret = rclient.cmd_sync(low, full_return=full_return, timeout=timeout)
         if isinstance(ret, dict):
             ret = ret.get('data', ret)
-        return ret
+    return ret
 
 def wheel(name, *args, **kwargs):
     '''

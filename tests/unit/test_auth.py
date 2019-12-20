@@ -131,7 +131,13 @@ class MasterACLTestCase(ModuleCase):
         self.clear._send_pub = lambda payload: True
 
         # make sure to return a JID, instead of a mock
-        self.clear.mminion.returners = {'.prep_jid': lambda x: 1}
+        self.clear.mminion.returners = {
+            '.prep_jid': lambda x: 1,
+            '.get_load': lambda x: 1,
+            '.save_load': lambda x: 1,
+            '.returner': lambda x: 1,
+        }
+
 
     def valid_clear_load(self):
         return {'tgt_type': 'glob',
@@ -574,7 +580,12 @@ class AuthACLTestCase(ModuleCase):
         self.clear._send_pub = lambda payload: True
 
         # make sure to return a JID, instead of a mock
-        self.clear.mminion.returners = {'.prep_jid': lambda x: 1}
+        self.clear.mminion.returners = {
+            '.prep_jid': lambda x: 1,
+            '.get_load': lambda x: 1,
+            '.save_load': lambda x: 1,
+            '.returner': lambda x: 1,
+        }
 
         self.valid_clear_load = {'tgt_type': 'glob',
                                  'jid': '',

@@ -2382,20 +2382,8 @@ class ClearFuncs(object):
                     )
 
         # always write out to the master job caches
-        try:
-            fstr = '{0}.save_load'.format(self.opts['master_job_cache'])
-            self.mminion.returners[fstr](clear_load['jid'], clear_load, minions)
-        except KeyError:
-            log.critical(
-                'The specified returner used for the master job cache '
-                '"%s" does not have a save_load function!',
-                self.opts['master_job_cache']
-            )
-        except Exception:
-            log.critical(
-                'The specified returner threw a stack trace:\n',
-                exc_info=True
-            )
+        salt.utils.job.store_job(self.opts, clear_load, minions=minions, prep_pub=True)
+
         # Set up the payload
         payload = {'enc': 'aes'}
         # Altering the contents of the publish load is serious!! Changes here
