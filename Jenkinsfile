@@ -4,7 +4,12 @@ def image_name = "artprod.dev.bloomberg.com/bb-inf/salt-minion:2018.3.3"
 // Without this both env.BUILD_ID 1 and 10 will both be .1
 // With change 1 will be .01 and 10 will be .1
 // BUILD_ID is a string, but incase it changes to int I'm casting
-def build_id = (env.BUILD_ID.toString().size() < 2) ? "0${env.BUILD_ID}" : "${env.BUILD_ID}"
+def dev_build_id = (env.BUILD_ID.toString().size() < 2) ? "0${env.BUILD_ID}" : "${env.BUILD_ID}"
+
+// Remove trailling 0s since the build will not include them with after period. Example 12.90 will be 12.9
+while (dev_build_id.endsWith("0")) {
+    dev_build_id = dev_build_id.substring(0, dev_build_id.length() - 1)
+}
 
 pipeline {
     agent { label 'syscore-salt'}
@@ -65,7 +70,7 @@ pipeline {
                 // Also push/override the original pr_number
                 //  |- If you want to install the latest dev build of a pr, just use pr number
                 sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
-                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${build_id} -k -u"  // no -s so we build
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${dev_build_id} -k -u"  // no -s so we build
             }
         }
         stage('Deploy to ose pypi') {
