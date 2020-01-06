@@ -139,7 +139,7 @@ def store(bank, key, data, expires=None):
                  '(bank, key, data, created_at, expires_at) '
                  'VALUES(%s, %s, %s, %s, %s) '
                  'ON CONFLICT (bank, key) DO UPDATE '
-                 'SET data=EXCLUDED.data, expires_at=EXCLUDED.expires_at')
+                 'SET data=EXCLUDED.data, expires_at=EXCLUDED.expires_at, created_at=NOW()')
 
     if expires:
         expires_at = expires
