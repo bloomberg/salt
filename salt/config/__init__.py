@@ -1253,6 +1253,7 @@ DEFAULT_MINION_OPTS = {
     'master_uri_format': 'default',
     'source_interface_name': '',
     'source_address': '',
+    'opts_overrides': [],
     'source_ret_port': 0,
     'source_publish_port': 0,
     'master_port': 4506,
