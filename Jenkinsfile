@@ -1,25 +1,37 @@
 def unique_container_name = "unit-tests-${env.BUILD_ID}${env.JOB_NAME.replace("/", "-")}"
 def image_name = "artprod.dev.bloomberg.com/bb-inf/salt-minion:2018.3.3"
 
+// Without this both env.BUILD_ID 1 and 10 will both be .1
+// With change 1 will be .01 and 10 will be .1
+// BUILD_ID is a string, but incase it changes to int I'm casting
+def dev_build_id = (env.BUILD_ID.toString().size() < 2) ? "0${env.BUILD_ID}" : "${env.BUILD_ID}"
+
+// Remove trailling 0s since the build will not include them with after period. Example 12.90 will be 12.9
+while (dev_build_id.endsWith("0")) {
+    dev_build_id = dev_build_id.substring(0, dev_build_id.length() - 1)
+}
+
 pipeline {
     agent { label 'syscore-salt'}
     environment {
         BBGH_TOKEN = credentials('bbgithub_token')
         PYPI_CREDENTIAL = credentials('salt_jenkins_ad_user_pass_escaped')
     }
+    triggers {
+        // Run once an hour between 4am-5am this pipeline will run on all salt prs but NOT master
+        // Run multiple times incase artifactory changes when they remove builds and also if there are any failures pushing to artifactory
+        cron(env.BRANCH_NAME == 'v2018.3.3-ca' ? '': '0 4-5 * * *')
+    }
     options {
         ansiColor('xterm')
-        // Currently builds take an hour and 30 minutes.
-        // If every executor is used, this will give enough time for the queue to pass and this build to run
-        // timeout(time: 3, unit: 'HOURS')
         // Keep up to 10 builds (artifacts/console output) from master and each branch retains up to 5 builds of that specific branch
-        buildDiscarder(logRotator(numToKeepStr: env.BRANCH_NAME == 'master' ? '10' : '5'))
+        buildDiscarder(logRotator(numToKeepStr: env.BRANCH_NAME == 'v2018.3.3-ca' ? '10' : '5'))
     }
     stages {
         stage('Build') {
             when {changeRequest()}
             steps {
-                sh 'bash ./build/build.sh -b $CHANGE_ID'
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}"
             }
         }
         stage('Run Upstream Salt Unit Tests') {
@@ -54,7 +66,11 @@ pipeline {
         stage('Deploy to dev pypi') {
             when {changeRequest()}
             steps {
-                sh 'bash ./build/build.sh -b $CHANGE_ID -k -s -u'
+                // This will build the dev pypi package as the (pr_number _ jenkins_build_number)
+                // Also push/override the original pr_number
+                //  |- If you want to install the latest dev build of a pr, just use pr number
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID} -k -s -u"
+                sh "bash ./build/build.sh -b ${env.CHANGE_ID}.${dev_build_id} -k -u"  // no -s so we build
             }
         }
         stage('Deploy to ose pypi') {

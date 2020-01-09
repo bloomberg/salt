@@ -75,7 +75,7 @@ usage() {
     -p  Upload the wheel to the production pypi repo. (Default: False)
     -q  credential for uploading to pypi. You can also use PYPI_CREDENTIAL_PSW
         environment variable or, if not speicied at all, be prompted at the console.
-    -s  Skip build steps. Useful if you built the artifacts earlier and 
+    -s  Skip build steps. Useful if you built the artifacts earlier and
         are only interested in uploading them. (Default: False)
     -t  bbgithub token for creating a release
     -u  Upload the wheel to Artifactory pypi (Default: False)
@@ -119,8 +119,8 @@ if [[ -z $_BbghToken && $_Prod == 1 ]]; then
   exit 1
 fi
 
-# Check post build tag is a number
-if [[ ! -z $_PostBuildTag ]] && [[ ! $_PostBuildTag =~ ^[0-9]+$ ]]; then
+# Check post build tag is a number only on PROD. On dev we want to include build number aswell.
+if [[ ! -z $_PostBuildTag ]] && [[ ! $_PostBuildTag =~ ^[0-9]+$ ]] && [[ $_Prod -eq $TRUE ]]; then
   echo "error: Post build tag is Not a number!" >&2
   exit 1
 fi
@@ -134,7 +134,7 @@ fi
 # --------------------------------------------------------
 
 function setup_build_env {
-  # this function creates a venv, activates it and installs dependencies 
+  # this function creates a venv, activates it and installs dependencies
 
   # if virtenv path is present, determine if we want to clean house
   # or keep it. Otherwise just create the virtenv path
