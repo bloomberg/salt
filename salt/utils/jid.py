@@ -76,16 +76,31 @@ def jid_to_time(jid):
     return ret
 
 
-def format_job_instance(job):
+
+def format_job_instance(jid, job, returns=None):
     '''
-    Format the job instance correctly
+    Helper to format jid instance
     '''
+    if not job:
+        ret = {'Error': 'Cannot contact returner or no job with this jid'}
+        return ret
+
     ret = {'Function': job.get('fun', 'unknown-function'),
            'Arguments': list(job.get('arg', [])),
+           'User': job.get('user', 'root'),
            # unlikely but safeguard from invalid returns
            'Target': job.get('tgt', 'unknown-target'),
-           'Target-type': job.get('tgt_type', 'list'),
-           'User': job.get('user', 'root')}
+           'Target-type': job.get('tgt_type', 'list'),}
+
+    # try to handle stupid formats
+    try:
+        if 'return' in returns:
+            ret['Results'] = returns['return']['return']
+        else:
+            # an orchestration is wrapped in some envelope data
+            ret['Results'] =  next(iter(returns.values()))['return']['return']
+    except Exception:
+        ret['Results'] = returns
 
     if 'metadata' in job:
         ret['Metadata'] = job.get('metadata', {})
@@ -93,16 +108,15 @@ def format_job_instance(job):
         if 'kwargs' in job:
             if 'metadata' in job['kwargs']:
                 ret['Metadata'] = job['kwargs'].get('metadata', {})
-    return ret
 
+    if 'Minions' in job:
+        ret['Minions'] = job['Minions']
 
-def format_jid_instance(jid, job):
-    '''
-    Format the jid correctly
-    '''
-    ret = format_job_instance(job)
     ret.update({'StartTime': jid_to_time(jid)})
     return ret
+
+
+format_jid_instance = format_job_instance
 
 
 def format_jid_instance_ext(jid, job):

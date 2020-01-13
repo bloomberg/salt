@@ -84,7 +84,7 @@ def active(display_progress=False):
             continue
         for job in data:
             if not job['jid'] in ret:
-                ret[job['jid']] = _format_jid_instance(job['jid'], job)
+                ret[job['jid']] = salt.utils.jid.format_jid_instance(job['jid'], job)
                 ret[job['jid']].update({'Running': [{minion: job.get('pid', None)}], 'Returned': []})
             else:
                 ret[job['jid']]['Running'].append({minion: job['pid']})
@@ -238,7 +238,7 @@ def list_job(jid, ext_source=None, display_progress=False):
     job = mminion.returners['{0}.get_load'.format(returner)](jid)
     returns = mminion.returners['{0}.get_jid'.format(returner)](jid)
 
-    ret.update(_format_jid_instance(jid, job, returns))
+    ret.update(salt.utils.jid.format_jid_instance(jid, job, returns))
 
     # transfer to an ordered dict so we can have a visually sensible order
     ordered_ret = OrderedDict()
@@ -482,7 +482,7 @@ def print_job(jid, ext_source=None):
 
     try:
         job = mminion.returners['{0}.get_load'.format(returner)](jid)
-        ret[jid] = _format_jid_instance(jid, job)
+        ret[jid] = salt.utils.jid.format_jid_instance(jid, job)
     except TypeError:
         ret[jid]['Result'] = (
             'Requested returner {0} is not available. Jobs cannot be '
@@ -580,43 +580,6 @@ def _get_returner(returner_types):
     for returner in returner_types:
         if returner and returner is not None:
             return returner
-
-
-def _format_jid_instance(jid, job, returns=None):
-    '''
-    Helper to format jid instance
-    '''
-    if not job:
-        ret = {'Error': 'Cannot contact returner or no job with this jid'}
-        return ret
-
-    _return = job.get('return')
-
-    ret = {'Function': job.get('fun', 'unknown-function'),
-           'Arguments': list(job.get('arg', [])),
-           'User': job.get('user', 'root'),
-           # unlikely but safeguard from invalid returns
-           'Target': job.get('tgt', 'unknown-target'),
-           'Target-type': job.get('tgt_type', 'list'),}
-
-    # an orchestration is wrapped in some envelope data
-    try:
-        ret['Results'] =  next(iter(returns.values()))['return']['return']
-    except Exception:
-        ret['Results'] = returns
-
-    if 'metadata' in job:
-        ret['Metadata'] = job.get('metadata', {})
-    else:
-        if 'kwargs' in job:
-            if 'metadata' in job['kwargs']:
-                ret['Metadata'] = job['kwargs'].get('metadata', {})
-
-    if 'Minions' in job:
-        ret['Minions'] = job['Minions']
-
-    ret.update({'StartTime': salt.utils.jid.jid_to_time(jid)})
-    return ret
 
 
 def _walk_through(job_dir, display_progress=False):
