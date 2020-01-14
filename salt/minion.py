@@ -1067,8 +1067,17 @@ class MinionManager(MinionBase):
         # Fire off all the minion coroutines
         self._spawn_minions()
 
+        # Start ancillary processes
+        self.start_cache_manager()
+
         # serve forever!
         self.io_loop.start()
+
+    def start_cache_manager(self):
+        log_queue = salt.log.setup.get_multiprocessing_logging_queue()
+
+        log.debug('Creating minion cache manager process')
+        self.process_manager.add_process(CacheManager, args=(self.opts,))
 
     @property
     def restart(self):
@@ -1088,6 +1097,51 @@ class MinionManager(MinionBase):
     def destroy(self):
         for minion in self.minions:
             minion.destroy()
+
+
+class CacheManager(salt.utils.process.SignalHandlingMultiprocessingProcess):
+    def __init__(self, opts, log_queue=None):
+        super(CacheManager, self).__init__(log_queue=log_queue)
+        self.opts = opts
+        self.loop_interval = self.opts['grains_refresh_every'] * 10  # minutes
+
+    def run(self):
+        salt.utils.process.appendproctitle(self.__class__.__name__)
+
+        while True:
+            log.trace('Running CacheManager')
+            self.handle_grains_cache()
+            time.sleep(self.loop_interval)
+
+    def handle_grains_cache(self):
+        if self.opts.get('grains_cache', False):
+            cache_file = os.path.join(self.opts['cachedir'], 'grains.cache.p')
+            import salt.loader
+            grains_data = salt.loader.grains(self.opts, force_refresh=True)
+
+            # Write cache if enabled
+            with salt.utils.files.set_umask(0o077):
+                try:
+                    if salt.utils.platform.is_windows():
+                        # Late import
+                        import salt.modules.cmdmod
+                        # Make sure cache file isn't read-only
+                        salt.modules.cmdmod._run_quiet('attrib -R "{0}"'.format(cache_file))
+                    with salt.utils.files.fopen(cache_file, 'w+b') as fp_:
+                        try:
+                            serial = salt.payload.Serial(self.opts)
+                            serial.dump(grains_data, fp_)
+                        except TypeError as e:
+                            log.error('Failed to serialize grains cache: %s', e)
+                            raise  # re-throw for cleanup
+                except Exception as e:
+                    log.error('Unable to write to grains cache file %s: %s', cache_file, e)
+                    # Based on the original exception, the file may or may not have been
+                    # created. If it was, we will remove it now, as the exception means
+                    # the serialized data is not to be trusted, no matter what the
+                    # exception is.
+                    if os.path.isfile(cache_file):
+                        os.unlink(cache_file)
 
 
 class Minion(MinionBase):
@@ -2099,24 +2153,6 @@ class Minion(MinionBase):
                     data['arg'] = []
                 self._handle_decoded_payload(data)
 
-    def _refresh_grains_watcher(self, refresh_interval_in_minutes):
-        '''
-        Create a loop that will fire a pillar refresh to inform a master about a change in the grains of this minion
-        :param refresh_interval_in_minutes:
-        :return: None
-        '''
-        if '__update_grains' not in self.opts.get('schedule', {}):
-            if 'schedule' not in self.opts:
-                self.opts['schedule'] = {}
-            self.opts['schedule'].update({
-                '__update_grains':
-                    {
-                        'function': 'event.fire',
-                        'args': [{}, 'grains_refresh'],
-                        'minutes': refresh_interval_in_minutes
-                    }
-            })
-
     def _fire_master_minion_start(self):
         # Send an event to the master that the minion is live
         self._fire_master(
@@ -2333,10 +2369,11 @@ class Minion(MinionBase):
         elif tag.startswith('manage_beacons'):
             self.manage_beacons(tag, data)
         elif tag.startswith('grains_refresh'):
-            if (data.get('force_refresh', False) or
-                    self.grains_cache != self.opts['grains']):
+            if data.get('force_refresh', False):
                 self.pillar_refresh(force_refresh=True)
-                self.grains_cache = self.opts['grains']
+            else:
+                self.pillar_refresh(force_refresh=False)
+            self.grains_cache = self.opts['grains']
         elif tag.startswith('environ_setenv'):
             self.environ_setenv(tag, data)
         elif tag.startswith('_minion_mine'):
@@ -2600,27 +2637,6 @@ class Minion(MinionBase):
                     self.returners,
                     utils=self.utils,
                     cleanup=[master_event(type='alive')])
-
-            try:
-                if self.opts['grains_refresh_every']:  # If exists and is not zero. In minutes, not seconds!
-                    if self.opts['grains_refresh_every'] > 1:
-                        log.debug(
-                            'Enabling the grains refresher. Will run every {0} minutes.'.format(
-                                self.opts['grains_refresh_every'])
-                        )
-                    else:  # Clean up minute vs. minutes in log message
-                        log.debug(
-                            'Enabling the grains refresher. Will run every {0} minute.'.format(
-                                self.opts['grains_refresh_every'])
-                        )
-                    self._refresh_grains_watcher(
-                        abs(self.opts['grains_refresh_every'])
-                    )
-            except Exception as exc:
-                log.error(
-                    'Exception occurred in attempt to initialize grain refresh routine during minion tune-in: {0}'.format(
-                        exc)
-                )
 
             # TODO: actually listen to the return and change period
             def handle_schedule():
