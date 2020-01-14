@@ -1068,15 +1068,15 @@ class MinionManager(MinionBase):
         self._spawn_minions()
 
         # Start ancillary processes
-        self.start_cache_manager()
+        self.start_maintenance
 
         # serve forever!
         self.io_loop.start()
 
-    def start_cache_manager(self):
+    def start_maintenance(self):
         log_queue = salt.log.setup.get_multiprocessing_logging_queue()
 
-        log.debug('Creating minion cache manager process')
+        log.debug('Creating minion maintenance process')
         self.process_manager.add_process(Maintenance, args=(self.opts,))
 
     @property
