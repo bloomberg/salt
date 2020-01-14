@@ -222,6 +222,7 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
         self.config = self.get_temp_config('minion', **overrides)
         self.addCleanup(delattr, self, 'config')
         self.highstate = salt.state.HighState(self.config)
+        self.fs = salt.fileserver.Fileserver(self.config)
         self.addCleanup(delattr, self, 'highstate')
         self.highstate.push_active()
 
@@ -290,6 +291,8 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
             os.path.join(self.state_tree_dir, sls_dir, 'top.sls'),
             self.state_tree_dir
         )
+        self.fs.clear_file_list_cache({'saltenv': 'base'})
+        self.highstate = salt.state.HighState(self.config)
         # Manually compile the high data. We don't have to worry about all of
         # the normal error checking we do here since we know that all the SLS
         # files exist and there is no whitelist/blacklist being used.
