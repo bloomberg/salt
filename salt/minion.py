@@ -1077,7 +1077,7 @@ class MinionManager(MinionBase):
         log_queue = salt.log.setup.get_multiprocessing_logging_queue()
 
         log.debug('Creating minion cache manager process')
-        self.process_manager.add_process(CacheManager, args=(self.opts,))
+        self.process_manager.add_process(Maintenance, args=(self.opts,))
 
     @property
     def restart(self):
@@ -1099,9 +1099,9 @@ class MinionManager(MinionBase):
             minion.destroy()
 
 
-class CacheManager(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
     def __init__(self, opts, log_queue=None):
-        super(CacheManager, self).__init__(log_queue=log_queue)
+        super(Maintenance, self).__init__(log_queue=log_queue)
         self.opts = opts
         self.loop_interval = self.opts['grains_refresh_every'] * 10  # minutes
 
@@ -1109,7 +1109,7 @@ class CacheManager(salt.utils.process.SignalHandlingMultiprocessingProcess):
         salt.utils.process.appendproctitle(self.__class__.__name__)
 
         while True:
-            log.trace('Running CacheManager')
+            log.trace('Running Maintenance')
             self.handle_grains_cache()
             time.sleep(self.loop_interval)
 
