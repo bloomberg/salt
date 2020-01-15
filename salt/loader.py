@@ -656,20 +656,14 @@ def _load_cached_grains(opts, cfn):
         return None
 
     grains_cache_age = int(time.time() - os.path.getmtime(cfn))
-    grains_cache_age_minutes = grains_cache_age // 60
-    grains_refresh_every = abs(opts.get('grains_refresh_every', 0))
-
-    if grains_refresh_every > 0 and grains_cache_age_minutes >= grains_refresh_every:
-        log.error('Grains cache last modified %s minutes ago and refresh interval is set to %s. Refreshing.',
-                  grains_cache_age_minutes, grains_refresh_every)
-        return None
 
     if grains_cache_age > opts.get('grains_cache_expiration', 300):
-        log.debug(
-            'Grains cache last modified %s seconds ago and cache '
-            'expiration is set to %s. Grains cache expired. '
-            'Refreshing.',
-            grains_cache_age, opts.get('grains_cache_expiration', 300)
+        log.warn(
+            'Grains cache last modified %s seconds ago and cache expiration is set to %s. '
+            'Grains cache expired. Refreshing. Set grains_refresh_every to a value less '
+            'than grains_cache_expiration to avoid delays when interacting with grains.',
+            grains_cache_age,
+            opts.get('grains_cache_expiration', 300)
         )
         return None
 
