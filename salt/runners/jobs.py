@@ -262,6 +262,7 @@ def list_jobs(ext_source=None,
               target=None,
               start_time=None,
               end_time=None,
+              contains=None,
               limit=100,
               display_progress=False):
     '''
@@ -334,6 +335,10 @@ def list_jobs(ext_source=None,
 
     limit
         maximum amount of job records to return. defaults to 100
+
+    contains
+        if returner supports it, an arbitrary @> postgres style contains filter.
+        if specified as a list, it is considered multiple separate conditions to OR together.
 
     .. _dateutil: https://pypi.python.org/pypi/python-dateutil
 
