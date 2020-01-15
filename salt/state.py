@@ -3990,7 +3990,16 @@ class BaseHighState(object):
                 # try to directly execute it, and if it fails, anyway it will
                 # return the former error
                 if not statefiles:
-                    statefiles.append((saltenvs[0], sls_match))
+                    if len(saltenvs) > 1:
+                        all_errors.append(
+                            'No matching salt environment for environments '
+                            '{0} found'.format(saltenvs)
+                        )
+                    else:
+                        all_errors.append(
+                            'No matching salt environment for environment '
+                            '\'{0}\' found'.format(saltenv[0])
+                        )
 
                 for (saltenv, sls) in statefiles:
                     r_env = '{0}:{1}'.format(saltenv, sls)

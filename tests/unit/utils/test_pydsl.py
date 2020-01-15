@@ -55,6 +55,7 @@ class CommonTestCaseBoilerplate(TestCase):
         self.config['cachedir'] = self.cache_dir
         self.config['test'] = False
         self.config['grains'] = salt.loader.grains(self.config)
+        self.fs = salt.fileserver.Fileserver(self.config)
         self.HIGHSTATE = HighState(self.config)
         self.HIGHSTATE.push_active()
 
@@ -337,6 +338,7 @@ class PyDSLRendererTestCase(CommonTestCaseBoilerplate):
             state('.C').cmd.run('echo C >> {0}', cwd='/')
             '''.format(output.replace('\\', '/'))))
 
+        self.fs.clear_file_list_cache({'saltenv': 'base'})
         self.state_highstate({'base': ['aaa']}, dirpath)
         with salt.utils.files.fopen(output, 'r') as f:
             self.assertEqual(''.join(f.read().split()), "XYZABCDEF")
