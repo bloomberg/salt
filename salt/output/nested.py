@@ -174,6 +174,9 @@ class NestDisplay(object):
             if 'outputter' in ret and 'data' in ret:
                 inner_ret = salt.output.try_printout(ret['data'], ret['outputter'], __opts__)
 
+            if 'out' in ret and 'return' in ret and 'id' in ret:
+                inner_ret = salt.output.try_printout({ret['id']: ret['return']}, ret['out'], __opts__)
+
             # unroll jobs.list_job output if it contains highstates
             retvals = ret.values()
             if retvals and all(isinstance(_ret, dict) and _ret.get('fun') == 'state.apply' for _ret in retvals):

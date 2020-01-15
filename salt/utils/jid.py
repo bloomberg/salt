@@ -95,7 +95,10 @@ def format_job_instance(jid, job, returns=None):
     # try to handle stupid formats
     try:
         if 'return' in returns:
-            ret['Results'] = returns['return']['return']
+            if isinstance(returns['return'], dict) and 'return' in returns['return']:
+                ret['Results'] = returns['return']['return']
+            else:
+                ret['Results'] = returns['return']
         else:
             # an orchestration is wrapped in some envelope data
             ret['Results'] =  next(iter(returns.values()))['return']['return']
