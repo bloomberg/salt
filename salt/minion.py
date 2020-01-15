@@ -1068,7 +1068,7 @@ class MinionManager(MinionBase):
         self._spawn_minions()
 
         # Start ancillary processes
-        self.start_maintenance
+        self.start_maintenance()
 
         # serve forever!
         self.io_loop.start()
@@ -1103,45 +1103,36 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
     def __init__(self, opts, log_queue=None):
         super(Maintenance, self).__init__(log_queue=log_queue)
         self.opts = opts
-        self.loop_interval = self.opts['grains_refresh_every'] * 10  # minutes
+        self.loop_interval = 60
 
     def run(self):
         salt.utils.process.appendproctitle(self.__class__.__name__)
 
+        last_grains_refresh = int(time.time())
+        grains_cache = self.opts.get('grains_cache', False)
+        grains_refresh_every = self.opts.get('grains_refresh_every', 0) * 60
+        grains_cache_expiration = self.opts.get('grains_cache_expiration', 300)
+
+        if grains_cache and grains_cache_expiration < grains_refresh_every:
+            log.warning(
+                'The grains cache ttl setting, grains_cache_expiration, is lower than the grains '
+                'cache refresh interval, grains_refresh_every. '
+                'This could cause delays when interacting with grains.',
+            )
+
         while True:
             log.trace('Running Maintenance')
-            self.handle_grains_cache()
+            now = int(time.time())
+            if grains_refresh_every > 0 and grains_refresh_every <= (now - last_grains_refresh):
+                self.handle_grains_cache()
+                last_grains_refresh = now
             time.sleep(self.loop_interval)
 
     def handle_grains_cache(self):
         if self.opts.get('grains_cache', False):
             cache_file = os.path.join(self.opts['cachedir'], 'grains.cache.p')
             import salt.loader
-            grains_data = salt.loader.grains(self.opts, force_refresh=True)
-
-            # Write cache if enabled
-            with salt.utils.files.set_umask(0o077):
-                try:
-                    if salt.utils.platform.is_windows():
-                        # Late import
-                        import salt.modules.cmdmod
-                        # Make sure cache file isn't read-only
-                        salt.modules.cmdmod._run_quiet('attrib -R "{0}"'.format(cache_file))
-                    with salt.utils.files.fopen(cache_file, 'w+b') as fp_:
-                        try:
-                            serial = salt.payload.Serial(self.opts)
-                            serial.dump(grains_data, fp_)
-                        except TypeError as e:
-                            log.error('Failed to serialize grains cache: %s', e)
-                            raise  # re-throw for cleanup
-                except Exception as e:
-                    log.error('Unable to write to grains cache file %s: %s', cache_file, e)
-                    # Based on the original exception, the file may or may not have been
-                    # created. If it was, we will remove it now, as the exception means
-                    # the serialized data is not to be trusted, no matter what the
-                    # exception is.
-                    if os.path.isfile(cache_file):
-                        os.unlink(cache_file)
+            salt.loader.grains(self.opts, force_refresh=True)
 
 
 class Minion(MinionBase):
