@@ -3992,12 +3992,12 @@ class BaseHighState(object):
                 if not statefiles:
                     if len(saltenvs) > 1:
                         all_errors.append(
-                            'No matching salt environment for environments '
+                            'No matching sls for environments '
                             '{0} found'.format(saltenvs)
                         )
                     else:
                         all_errors.append(
-                            'No matching salt environment for environment '
+                            'No matching sls for environment '
                             '\'{0}\' found'.format(saltenv[0])
                         )
 
