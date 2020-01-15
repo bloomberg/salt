@@ -2364,7 +2364,6 @@ class Minion(MinionBase):
                 self.pillar_refresh(force_refresh=True)
             else:
                 self.pillar_refresh(force_refresh=False)
-            self.grains_cache = self.opts['grains']
         elif tag.startswith('environ_setenv'):
             self.environ_setenv(tag, data)
         elif tag.startswith('_minion_mine'):
@@ -2566,7 +2565,6 @@ class Minion(MinionBase):
             self.beacons = salt.beacons.Beacon(self.opts, self.functions)
             uid = salt.utils.user.get_uid(user=self.opts.get('user', None))
             self.proc_dir = get_proc_dir(self.opts['cachedir'], uid=uid)
-            self.grains_cache = self.opts['grains']
             self.ready = True
 
     def setup_beacons(self, before_connect=False):
@@ -3772,7 +3770,6 @@ class ProxyMinion(Minion):
 
         #  Sync the grains here so the proxy can communicate them to the master
         self.functions['saltutil.sync_grains'](saltenv='base')
-        self.grains_cache = self.opts['grains']
         self.ready = True
 
     @classmethod
