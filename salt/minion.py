@@ -1108,7 +1108,6 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
     def run(self):
         salt.utils.process.appendproctitle(self.__class__.__name__)
 
-        last_grains_refresh = int(time.time())
         grains_cache = self.opts.get('grains_cache', False)
         grains_refresh_every = self.opts.get('grains_refresh_every', 0) * 60
         grains_cache_expiration = self.opts.get('grains_cache_expiration', 300)
@@ -1120,12 +1119,13 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
                 'This could cause delays when interacting with grains.',
             )
 
+        last_grains_refresh = int(time.time())
         while True:
             log.trace('Running Maintenance')
             now = int(time.time())
             if grains_refresh_every > 0 and grains_refresh_every <= (now - last_grains_refresh):
                 self.handle_grains_cache()
-                last_grains_refresh = now
+                last_grains_refresh = int(time.time())
             time.sleep(self.loop_interval)
 
     def handle_grains_cache(self):
