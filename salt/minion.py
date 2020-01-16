@@ -1105,6 +1105,18 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
         self.opts = opts
         self.loop_interval = 60
 
+    # __setstate__ and __getstate__ are only used on Windows.
+    # We do this so that __init__ will be invoked on Windows in the child
+    # process. These methods are only used when pickling so will not be used on
+    # non-Windows platforms.
+    def __setstate__(self, state):
+        self._is_child = True
+        self.__init__(state['opts'], log_queue=state['log_queue'])
+
+    def __getstate__(self):
+        return {'opts': self.opts,
+                'log_queue': self.log_queue}
+
     def run(self):
         salt.utils.process.appendproctitle(self.__class__.__name__)
 
@@ -1130,7 +1142,6 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
 
     def handle_grains_cache(self):
         if self.opts.get('grains_cache', False):
-            cache_file = os.path.join(self.opts['cachedir'], 'grains.cache.p')
             import salt.loader
             salt.loader.grains(self.opts, force_refresh=True)
 
