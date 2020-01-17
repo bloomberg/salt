@@ -3998,7 +3998,7 @@ class BaseHighState(object):
                     else:
                         all_errors.append(
                             'No matching sls for environment '
-                            '\'{0}\' found'.format(saltenv[0])
+                            '\'{0}\' found'.format(saltenv)
                         )
 
                 for (saltenv, sls) in statefiles:
