@@ -139,7 +139,7 @@ def _erase_vm_info(name):
             except KeyError:
                 # no delete method found -- load a blank value
                 __utils__['sdb.sdb_set'](key, None, __opts__)
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         pass
 
     uri = _build_sdb_uri(name)
@@ -149,7 +149,7 @@ def _erase_vm_info(name):
     except KeyError:
         # no delete method found -- load an empty dictionary
         __utils__['sdb.sdb_set'](uri, {}, __opts__)
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         pass
 
 
@@ -208,7 +208,7 @@ def list_domains():
     vms = []
     cmd = 'vagrant global-status'
     reply = __salt__['cmd.shell'](cmd)
-    log.info('--->\n%s', reply)
+    log.debug('--->\n%s', reply)
     for line in reply.split('\n'):  # build a list of the text reply
         tokens = line.strip().split()
         try:
@@ -592,10 +592,7 @@ def get_ssh_config(name, network_mask='', get_private_key=False):
                   '-oControlPath=none ' \
                   '{User}@{HostName} ifconfig'.format(**ssh_config)
 
-        log.info(
-            'Trying ssh -p %s %s@%s ifconfig',
-            ssh_config['Port'], ssh_config['User'], ssh_config['HostName']
-        )
+        log.info('Trying ssh -p {Port} {User}@{HostName} ifconfig'.format(**ssh_config))
         reply = __salt__['cmd.shell'](command)
         log.info('--->\n%s', reply)
         target_network_range = ipaddress.ip_network(network_mask, strict=False)

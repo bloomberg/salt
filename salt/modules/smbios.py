@@ -271,7 +271,7 @@ def _dmi_cast(key, val, clean=True):
         else:
             try:
                 val = int(val)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
 
     return val
@@ -281,7 +281,7 @@ def _dmi_isclean(key, val):
     '''
     Clean out well-known bogus values
     '''
-    if not val or re.match('none', val, flags=re.IGNORECASE):
+    if val is None or not val or re.match('none', val, flags=re.IGNORECASE):
         # log.debug('DMI {0} value {1} seems invalid or empty'.format(key, val))
         return False
     elif 'uuid' in key:

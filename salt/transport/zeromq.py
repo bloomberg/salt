@@ -206,9 +206,9 @@ class AsyncZeroMQReqChannel(salt.transport.client.ReqChannel):
         if self.crypt != 'clear':
             # we don't need to worry about auth as a kwarg, since its a singleton
             self.auth = salt.crypt.AsyncAuth(self.opts, io_loop=self._io_loop)
-        log.debug('Connecting the Minion to the Master URI (for the return server): %s', self.opts['master_uri'])
+        log.debug('Connecting the Minion to the Master URI (for the return server): %s', self.master_uri)
         self.message_client = AsyncReqMessageClientPool(self.opts,
-                                                        args=(self.opts, self.opts['master_uri'],),
+                                                        args=(self.opts, self.master_uri,),
                                                         kwargs={'io_loop': self._io_loop})
         self._closing = False
 
@@ -246,6 +246,7 @@ class AsyncZeroMQReqChannel(salt.transport.client.ReqChannel):
             if not loop_instance_map:
                 del self.__class__.instance_map[self._io_loop]
 
+    # pylint: disable=W1701
     def __del__(self):
         with self._refcount_lock:
             # Make sure we actually close no matter if something
@@ -257,6 +258,7 @@ class AsyncZeroMQReqChannel(salt.transport.client.ReqChannel):
             if exc.errno != errno.EBADF:
                 # If its not a bad file descriptor error, raise
                 raise
+    # pylint: enable=W1701
 
     @property
     def master_uri(self):
@@ -497,8 +499,10 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
         )
         self.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.close()
+    # pylint: enable=W1701
 
     # TODO: this is the time to see if we are connected, maybe use the req channel to guess?
     @tornado.gen.coroutine
@@ -507,7 +511,7 @@ class AsyncZeroMQPubChannel(salt.transport.mixins.auth.AESPubClientMixin, salt.t
             yield self.auth.authenticate()
 
         # if this is changed from the default, we assume it was intentional
-        if int(self.opts.get('publish_port', 4505)) != 4505:
+        if int(self.opts.get('publish_port', 4506)) != 4506:
             self.publish_port = self.opts.get('publish_port')
         # else take the relayed publish_port master reports
         else:
@@ -724,7 +728,7 @@ class ZeroMQReqServerChannel(salt.transport.mixins.auth.AESReqServerMixin,
         try:
             payload = self.serial.loads(payload[0])
             payload = self._decode_payload(payload)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             exc_type = type(exc).__name__
             if exc_type == 'AuthenticationError':
                 log.debug(
@@ -766,9 +770,9 @@ class ZeroMQReqServerChannel(salt.transport.mixins.auth.AESReqServerMixin,
             # Take the payload_handler function that was registered when we created the channel
             # and call it, returning control to the caller until it completes
             ret, req_opts = yield self.payload_handler(payload)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             # always attempt to return an error to the minion
-            stream.send(self.serial.dumps('Some exception handling minion payload'))
+            stream.send('Some exception handling minion payload')
             log.error('Some exception handling a payload from minion', exc_info=True)
             raise tornado.gen.Return()
 
@@ -785,7 +789,7 @@ class ZeroMQReqServerChannel(salt.transport.mixins.auth.AESReqServerMixin,
         else:
             log.error('Unknown req_fun %s', req_fun)
             # always attempt to return an error to the minion
-            stream.send(self.serial.dumps('Server-side exception handling payload'))
+            stream.send('Server-side exception handling payload')
         raise tornado.gen.Return()
 
     def __setup_signals(self):
@@ -1089,8 +1093,10 @@ class AsyncReqMessageClientPool(salt.transport.MessageClientPool):
         )
         self.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.close()
+    # pylint: enable=W1701
 
 
 # TODO: unit tests!
@@ -1167,8 +1173,10 @@ class AsyncReqMessageClient(object):
         )
         self.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.close()
+    # pylint: enable=W1701
 
     def _init_socket(self):
         if hasattr(self, 'stream'):
@@ -1199,7 +1207,7 @@ class AsyncReqMessageClient(object):
 
     @tornado.gen.coroutine
     def _internal_send_recv(self):
-        while self.send_queue:
+        while len(self.send_queue) > 0:
             message = self.send_queue[0]
             future = self.send_future_map.get(message, None)
             if future is None:
@@ -1217,7 +1225,7 @@ class AsyncReqMessageClient(object):
 
             try:
                 ret = yield future
-            except Exception as err:  # pylint: disable=W0702
+            except Exception as err:  # pylint: disable=broad-except
                 log.debug('Re-init ZMQ socket: %s', err)
                 self._init_socket()  # re-init the zmq socket (no other way in zmq)
                 del self.send_queue[0]
@@ -1285,7 +1293,7 @@ class AsyncReqMessageClient(object):
             send_timeout = self.io_loop.call_later(timeout, self.timeout_message, message)
             self.send_timeout_map[message] = send_timeout
 
-        if not self.send_queue:
+        if len(self.send_queue) == 0:
             self.io_loop.spawn_callback(self._internal_send_recv)
 
         self.send_queue.append(message)

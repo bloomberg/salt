@@ -5,15 +5,6 @@ A REST API for Salt
 
 .. py:currentmodule:: salt.netapi.rest_cherrypy.app
 
-.. note::
-
-    This module is Experimental on Windows platforms, and supports limited
-    configurations:
-
-    - doesn't support PAM authentication (i.e. external_auth: auto)
-    - doesn't support SSL (i.e. disable_ssl: True)
-
-
 :depends:
     - CherryPy Python module.
 
@@ -77,12 +68,12 @@ A REST API for Salt
     debug : ``False``
         Starts the web server in development mode. It will reload itself when
         the underlying code is changed and will output more debugging info.
-    log.access_file
+    log_access_file
         Path to a file to write HTTP access logs.
 
         .. versionadded:: 2016.11.0
 
-    log.error_file
+    log_error_file
         Path to a file to write HTTP error logs.
 
         .. versionadded:: 2016.11.0
@@ -720,11 +711,11 @@ def salt_api_acl_tool(username, request):
     :type request: cherrypy.request
     '''
     failure_str = ("[api_acl] Authentication failed for "
-                   "user %s from IP %s")
+                   "user {0} from IP {1}")
     success_str = ("[api_acl] Authentication sucessful for "
-                   "user %s from IP %s")
+                   "user {0} from IP {1}")
     pass_str = ("[api_acl] Authentication not checked for "
-                "user %s from IP %s")
+                "user {0} from IP {1}")
 
     acl = None
     # Salt Configuration
@@ -742,23 +733,23 @@ def salt_api_acl_tool(username, request):
         if users:
             if username in users:
                 if ip in users[username] or '*' in users[username]:
-                    logger.info(success_str, username, ip)
+                    logger.info(success_str.format(username, ip))
                     return True
                 else:
-                    logger.info(failure_str, username, ip)
+                    logger.info(failure_str.format(username, ip))
                     return False
             elif username not in users and '*' in users:
                 if ip in users['*'] or '*' in users['*']:
-                    logger.info(success_str, username, ip)
+                    logger.info(success_str.format(username, ip))
                     return True
                 else:
-                    logger.info(failure_str, username, ip)
+                    logger.info(failure_str.format(username, ip))
                     return False
             else:
-                logger.info(failure_str, username, ip)
+                logger.info(failure_str.format(username, ip))
                 return False
     else:
-        logger.info(pass_str, username, ip)
+        logger.info(pass_str.format(username, ip))
         return True
 
 
@@ -775,11 +766,11 @@ def salt_ip_verify_tool():
         if cherrypy_conf:
             auth_ip_list = cherrypy_conf.get('authorized_ips', None)
             if auth_ip_list:
-                logger.debug('Found IP list: %s', auth_ip_list)
+                logger.debug("Found IP list: {0}".format(auth_ip_list))
                 rem_ip = cherrypy.request.headers.get('Remote-Addr', None)
-                logger.debug('Request from IP: %s', rem_ip)
+                logger.debug("Request from IP: {0}".format(rem_ip))
                 if rem_ip not in auth_ip_list:
-                    logger.error('Blocked IP: %s', rem_ip)
+                    logger.error("Blocked IP: {0}".format(rem_ip))
                     raise cherrypy.HTTPError(403, 'Bad IP')
 
 
@@ -829,9 +820,11 @@ def cors_tool():
             resp_head['Connection'] = 'keep-alive'
             resp_head['Access-Control-Max-Age'] = '1400'
 
-        # CORS requests should short-circuit the other tools.
-        cherrypy.response.body = ''
+        # Note: CherryPy on Py3 uses binary objects for the response
+        # Python 2.6 also supports the byte prefix, so no need for conditionals
+        cherrypy.response.body = b''
         cherrypy.response.status = 200
+        # CORS requests should short-circuit the other tools.
         cherrypy.serving.request.handler = None
 
         # Needed to avoid the auth_tool check.
@@ -879,7 +872,7 @@ def hypermedia_handler(*args, **kwargs):
         raise cherrypy.HTTPError(504)
     except cherrypy.CherryPyException:
         raise
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-except
         # The TimeoutError exception class was removed in CherryPy in 12.0.0, but
         # Still check existence of TimeoutError and handle in CherryPy < 12.
         # The check was moved down from the SaltClientTimeout error line because
@@ -912,7 +905,7 @@ def hypermedia_handler(*args, **kwargs):
         if six.PY3:
             response = salt.utils.stringutils.to_bytes(response)
         return response
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         msg = 'Could not serialize the return data from Salt.'
         logger.debug(msg, exc_info=True)
         raise cherrypy.HTTPError(500, msg)
@@ -1239,8 +1232,6 @@ class LowDataAdapter(object):
             HTTP/1.1 200 OK
             Content-Type: application/json
         '''
-        import inspect  # pylint: disable=unused-import
-
         return {
             'return': "Welcome",
             'clients': salt.netapi.CLIENTS,
@@ -1914,12 +1905,10 @@ class Login(LowDataAdapter):
 
             if not perms:
                 logger.debug("Eauth permission list not found.")
-        except Exception:
-            logger.debug(
-                "Configuration for external_auth malformed for eauth '%s', "
-                "and user '%s'.", token.get('eauth'), token.get('name'),
-                exc_info=True
-            )
+        except Exception:  # pylint: disable=broad-except
+            logger.debug("Configuration for external_auth malformed for "
+                "eauth '{0}', and user '{1}'."
+                .format(token.get('eauth'), token.get('name')), exc_info=True)
             perms = None
 
         return {'return': [{
@@ -2562,7 +2551,8 @@ class WebsocketEndpoint(object):
                             )
                     except UnicodeDecodeError:
                         logger.error(
-                            "Error: Salt event has non UTF-8 data:\n%s", data)
+                                "Error: Salt event has non UTF-8 data:\n{0}"
+                                .format(data))
 
         parent_pipe, child_pipe = Pipe()
         handler.pipe = parent_pipe

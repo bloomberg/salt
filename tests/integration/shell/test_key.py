@@ -11,6 +11,7 @@ import textwrap
 from tests.support.runtests import RUNTIME_VARS
 from tests.support.case import ShellCase
 from tests.support.mixins import ShellCaseCommonTestsMixin
+from tests.support.helpers import skip_if_not_root, destructiveTest
 
 # Import 3rd-party libs
 from salt.ext import six
@@ -146,7 +147,7 @@ class KeyTest(ShellCase, ShellCaseCommonTestsMixin):
         try:
             import salt.utils.yaml
             ret = salt.utils.yaml.safe_load('\n'.join(data))
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             pass
 
         expect = []
@@ -187,6 +188,8 @@ class KeyTest(ShellCase, ShellCaseCommonTestsMixin):
         expect = ['Accepted Keys:', 'minion', 'sub_minion']
         self.assertEqual(data, expect)
 
+    @skip_if_not_root
+    @destructiveTest
     def test_list_acc_eauth(self):
         '''
         test salt-key -l with eauth
@@ -197,6 +200,8 @@ class KeyTest(ShellCase, ShellCaseCommonTestsMixin):
         self.assertEqual(data, expect)
         self._remove_user()
 
+    @skip_if_not_root
+    @destructiveTest
     def test_list_acc_eauth_bad_creds(self):
         '''
         test salt-key -l with eauth and bad creds
@@ -259,32 +264,3 @@ class KeyTest(ShellCase, ShellCaseCommonTestsMixin):
             )
         finally:
             shutil.rmtree(tempdir)
-
-    def test_issue_7754(self):
-        old_cwd = os.getcwd()
-        config_dir = os.path.join(RUNTIME_VARS.TMP, 'issue-7754')
-        if not os.path.isdir(config_dir):
-            os.makedirs(config_dir)
-
-        os.chdir(config_dir)
-
-        config_file_name = 'master'
-        with salt.utils.files.fopen(self.get_config_file_path(config_file_name), 'r') as fhr:
-            config = salt.utils.yaml.safe_load(fhr)
-            config['log_file'] = 'file:///dev/log/LOG_LOCAL3'
-            with salt.utils.files.fopen(os.path.join(config_dir, config_file_name), 'w') as fhw:
-                salt.utils.yaml.safe_dump(config, fhw, default_flow_style=False)
-        ret = self.run_script(
-            self._call_binary_,
-            '--config-dir {0} -L'.format(
-                config_dir
-            ),
-            timeout=60
-        )
-        try:
-            self.assertIn('minion', '\n'.join(ret))
-            self.assertFalse(os.path.isdir(os.path.join(config_dir, 'file:')))
-        finally:
-            self.chdir(old_cwd)
-            if os.path.isdir(config_dir):
-                shutil.rmtree(config_dir)

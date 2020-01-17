@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -tests/integration/daemons/test_masterapi.py:71*- coding: utf-8 -*-
 
 # Import Python libs
 from __future__ import absolute_import, print_function, unicode_literals

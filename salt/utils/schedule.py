@@ -44,7 +44,6 @@ import salt.minion
 import salt.payload
 import salt.syspaths
 import salt.exceptions
-import salt.log.setup as log_setup
 import salt.defaults.exitcodes
 from salt.utils.odict import OrderedDict
 
@@ -130,7 +129,8 @@ class Schedule(object):
                            cleanup=None,
                            proxy=None,
                            standalone=False,
-                           utils=None):
+                           utils=None,
+                           _subprocess_list=None):
         self.opts = opts
         self.proxy = proxy
         self.functions = functions
@@ -158,6 +158,10 @@ class Schedule(object):
         if cleanup:
             for prefix in cleanup:
                 self.delete_job_prefix(prefix)
+        if _subprocess_list is None:
+            self._subprocess_list = salt.utils.process.SubprocessList()
+        else:
+            self._subprocess_list = _subprocess_list
 
     def __getnewargs__(self):
         return self.opts, self.functions, self.returners, self.intervals, None
@@ -209,9 +213,8 @@ class Schedule(object):
         # NOTE--jid_include defaults to True, thus if it is missing from the data
         # dict we treat it like it was there and is True
 
-        # Check if we're able to run, default to False
-        # in case the `run` value is not present.
-        if not data['run']:
+        # Check if we're able to run
+        if 'run' not in data or not data['run']:
             return data
         if 'jid_include' not in data or data['jid_include']:
             jobcount = 0
@@ -452,27 +455,29 @@ class Schedule(object):
             func = data['fun']
         else:
             func = None
-        if not isinstance(func, list):
-            func = [func]
-        for _func in func:
-            if _func not in self.functions:
-                log.error(
-                    'Invalid function: %s in scheduled job %s.',
-                    _func, name
-                )
+        if func not in self.functions:
+            log.info(
+                'Invalid function: %s in scheduled job %s.',
+                func, name
+            )
 
         if 'name' not in data:
             data['name'] = name
+
+        # Assume run should be True until we check max_running
         if 'run' not in data:
             data['run'] = True
-        log.info('Running Job: %s', name)
+
+        if not self.standalone:
+            data = self._check_max_running(func,
+                                           data,
+                                           self.opts,
+                                           datetime.datetime.now())
 
         # Grab run, assume True
-        run = data.get('run', True)
-        if run:
-            now = datetime.datetime.now()
-            self._run_job(_func, data)
-            data['_last_run'] = now
+        if data.get('run'):
+            log.info('Running Job: %s', name)
+            self._run_job(func, data)
 
     def enable_schedule(self):
         '''
@@ -615,34 +620,6 @@ class Schedule(object):
         schedule = self._get_schedule()
         return schedule.get(name, {})
 
-    def job_running(self, data):
-        '''
-        Return the schedule data structure
-        '''
-        # Check to see if there are other jobs with this
-        # signature running.  If there are more than maxrunning
-        # jobs present then don't start another.
-        # If jid_include is False for this job we can ignore all this
-        # NOTE--jid_include defaults to True, thus if it is missing from the data
-        # dict we treat it like it was there and is True
-
-        # Check if we're able to run, default to False
-        # in case the `run` value is not present.
-        running = False
-        if 'jid_include' not in data or data['jid_include']:
-            if self.opts['__role'] == 'master':
-                current_jobs = salt.utils.master.get_running_jobs(self.opts)
-            else:
-                current_jobs = salt.utils.minion.running(self.opts)
-            for job in current_jobs:
-                if 'schedule' in job:
-                    log.info('=== data %s ===', data)
-                    log.info('=== job %s ===', job)
-                    if data['name'] in job['schedule'] \
-                            and salt.utils.process.os_is_running(job['pid']):
-                        running = True
-        return running
-
     def handle_func(self, multiprocessing_enabled, func, data):
         '''
         Execute this method in a multiprocess or thread
@@ -686,14 +663,6 @@ class Schedule(object):
                 salt.minion.get_proc_dir(self.opts['cachedir']),
                 ret['jid']
             )
-
-        if multiprocessing_enabled and not salt.utils.platform.is_windows():
-            # Reconfigure multiprocessing logging after daemonizing
-            log_setup.setup_multiprocessing_logging()
-
-        if multiprocessing_enabled:
-            # Don't *BEFORE* to go into try to don't let it triple execute the finally section.
-            salt.utils.process.daemonize_if(self.opts)
 
         # TODO: Make it readable! Splt to funcs, remove nested try-except-finally sections.
         try:
@@ -822,7 +791,7 @@ class Schedule(object):
                                 func, returner
                             )
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             log.exception('Unhandled exception running %s', ret['fun'])
             # Although catch-all exception handlers are bad, the exception here
             # is to let the exception bubble up to the top of the thread context,
@@ -861,7 +830,7 @@ class Schedule(object):
                                                                   self.opts['sock_dir'])
                     try:
                         event.fire_event(load, '__schedule_return')
-                    except Exception as exc:
+                    except Exception as exc:  # pylint: disable=broad-except
                         log.exception('Unhandled exception firing __schedule_return event')
                     finally:
                         event.destroy()
@@ -1395,14 +1364,11 @@ class Schedule(object):
                 func = data['fun']
             else:
                 func = None
-            if not isinstance(func, list):
-                func = [func]
-            for _func in func:
-                if _func not in self.functions:
-                    log.info(
-                        'Invalid function: %s in scheduled job %s.',
-                        _func, job_name
-                    )
+            if func not in self.functions:
+                log.info(
+                    'Invalid function: %s in scheduled job %s.',
+                    func, job_name
+                )
 
             if '_next_fire_time' not in data:
                 data['_next_fire_time'] = None
@@ -1584,37 +1550,16 @@ class Schedule(object):
 
                     run = data['run']
 
-                # If args is a list and less than the number of functions
-                # run is set to False.
-                if 'args' in data and isinstance(data['args'], list):
-                    if len(data['args']) < len(func):
-                        data['_error'] = ('Number of arguments is less than '
-                                          'the number of functions. Ignoring job.')
-                        log.error(data['_error'])
-                        run = False
-
             # If the job item has continue, then we set run to False
             # so the job does not run but we still get the important
             # information calculated, eg. _next_fire_time
             if '_continue' in data and data['_continue']:
                 run = False
 
-            # If there is no job specific enabled available,
-            # grab the global which defaults to True.
-            if 'enabled' not in data:
-                data['enabled'] = self.enabled
-
-            # If globally disabled, disable the job
-            if not self.enabled:
-                data['enabled'] = self.enabled
-                data['_skip_reason'] = 'disabled'
-                data['_skipped_time'] = now
-                data['_skipped'] = True
-                run = False
-
-            # Job is disabled, set run to False
-            if 'enabled' in data and not data['enabled']:
-                data['_enabled'] = False
+            # If globally disabled or job
+            # is diabled skip the job
+            if not self.enabled or not data.get('enabled', True):
+                log.trace('Job: %s is disabled', job_name)
                 data['_skip_reason'] = 'disabled'
                 data['_skipped_time'] = now
                 data['_skipped'] = True
@@ -1627,14 +1572,6 @@ class Schedule(object):
 
             try:
                 if run:
-                    # Job is disabled, continue
-                    if 'enabled' in data and not data['enabled']:
-                        log.debug('Job: %s is disabled', job_name)
-                        data['_skip_reason'] = 'disabled'
-                        data['_skipped_time'] = now
-                        data['_skipped'] = True
-                        continue
-
                     if 'jid_include' not in data or data['jid_include']:
                         data['jid_include'] = True
                         log.debug('schedule: Job %s was scheduled with jid_include, '
@@ -1685,7 +1622,7 @@ class Schedule(object):
         run_schedule_jobs_in_background = self.opts.get('run_schedule_jobs_in_background', True)
 
         if run_schedule_jobs_in_background is False:
-             # Explicitly pass False for multiprocessing_enabled
+            # Explicitly pass False for multiprocessing_enabled
             self.handle_func(False, func, data)
             return
 
@@ -1702,31 +1639,32 @@ class Schedule(object):
 
         try:
             if multiprocessing_enabled:
-                thread_cls = salt.utils.process.SignalHandlingMultiprocessingProcess
+                thread_cls = salt.utils.process.SignalHandlingProcess
             else:
                 thread_cls = threading.Thread
 
-            for i, _func in enumerate(func):
-                _data = copy.deepcopy(data)
-                if 'args' in _data and isinstance(_data['args'], list):
-                    _data['args'] = _data['args'][i]
-
-                if multiprocessing_enabled:
-                    with salt.utils.process.default_signals(signal.SIGINT, signal.SIGTERM):
-                        proc = thread_cls(target=self.handle_func, args=(multiprocessing_enabled, _func, _data))
-                        # Reset current signals before starting the process in
-                        # order not to inherit the current signal handlers
-                        proc.start()
-                    proc.join()
-                else:
-                    proc = thread_cls(target=self.handle_func, args=(multiprocessing_enabled, _func, _data))
+            if multiprocessing_enabled:
+                with salt.utils.process.default_signals(signal.SIGINT, signal.SIGTERM):
+                    proc = thread_cls(target=self.handle_func, args=(multiprocessing_enabled, func, data))
+                    # Reset current signals before starting the process in
+                    # order not to inherit the current signal handlers
                     proc.start()
+                    proc.name = '{}-Schedule-{}'.format(proc.name, data['name'])
+                    self._subprocess_list.add(proc)
+            else:
+                proc = thread_cls(target=self.handle_func, args=(multiprocessing_enabled, func, data))
+                proc.start()
+                proc.name = '{}-Schedule-{}'.format(proc.name, data['name'])
+                self._subprocess_list.add(proc)
         finally:
             if multiprocessing_enabled and salt.utils.platform.is_windows():
                 # Restore our function references.
                 self.functions = functions
                 self.returners = returners
                 self.utils = utils
+
+    def cleanup_subprocesses(self):
+        self._subprocess_list.cleanup()
 
 
 def clean_proc_dir(opts):
@@ -1742,7 +1680,8 @@ def clean_proc_dir(opts):
             job = None
             try:
                 job = salt.payload.Serial(opts).load(fp_)
-            except Exception:  # It's corrupted
+            except Exception:  # pylint: disable=broad-except
+                # It's corrupted
                 # Windows cannot delete an open file
                 if salt.utils.platform.is_windows():
                     fp_.close()

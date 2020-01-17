@@ -1435,7 +1435,10 @@ def user_create(user,
         args['password'] = six.text_type(password)
     elif password_hash is not None:
         if salt.utils.versions.version_cmp(server_version, compare_version) >= 0:
-            qry += ' IDENTIFIED BY %(password)s'
+            if 'MariaDB' in server_version:
+                qry += ' IDENTIFIED BY PASSWORD %(password)s'
+            else:
+                qry += ' IDENTIFIED BY %(password)s'
         else:
             qry += ' IDENTIFIED BY PASSWORD %(password)s'
         args['password'] = password_hash
@@ -1552,7 +1555,10 @@ def user_chpass(user,
     args['user'] = user
     args['host'] = host
     if salt.utils.versions.version_cmp(server_version, compare_version) >= 0:
-        qry = "ALTER USER %(user)s@%(host)s IDENTIFIED BY %(password)s;"
+        if 'MariaDB' in server_version and password_hash is not None:
+            qry = "ALTER USER %(user)s@%(host)s IDENTIFIED BY PASSWORD %(password)s;"
+        else:
+            qry = "ALTER USER %(user)s@%(host)s IDENTIFIED BY %(password)s;"
     else:
         qry = ('UPDATE mysql.user SET ' + password_column + '=' + password_sql +
                ' WHERE User=%(user)s AND Host = %(host)s;')
@@ -1810,7 +1816,7 @@ def __grant_generate(grant,
     args = {}
     args['user'] = user
     args['host'] = host
-    if ssl_option and isinstance(ssl_option, list):
+    if isinstance(ssl_option, list) and ssl_option:
         qry += __ssl_option_sanitize(ssl_option)
     if salt.utils.data.is_true(grant_option):
         qry += ' WITH GRANT OPTION'
@@ -1895,7 +1901,7 @@ def grant_exists(grant,
         target = __grant_generate(
             grant, database, user, host, grant_option, escape
         )
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         log.error('Error during grant generation.')
         return False
 
@@ -1939,7 +1945,8 @@ def grant_exists(grant,
             else:
                 log.debug('grants mismatch \'%s\'<>\'%s\'', grant_tokens, target_tokens)
 
-        except Exception as exc:  # Fallback to strict parsing
+        except Exception as exc:  # pylint: disable=broad-except
+            # Fallback to strict parsing
             log.exception(exc)
             if grants is not False and target in grants:
                 log.debug('Grant exists.')
@@ -1978,7 +1985,7 @@ def grant_add(grant,
     grant = grant.strip()
     try:
         qry = __grant_generate(grant, database, user, host, grant_option, escape, ssl_option)
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         log.error('Error during grant generation')
         return False
     try:
@@ -2200,7 +2207,7 @@ def get_master_status(**connection_args):
     conn.close()
 
     # check for if this minion is not a master
-    if not rtnv:
+    if len(rtnv) == 0:
         rtnv.append([])
 
     log.debug('%s-->%s', mod, len(rtnv[0]))
@@ -2270,7 +2277,7 @@ def get_slave_status(**connection_args):
     conn.close()
 
     # check for if this minion is not a slave
-    if not rtnv:
+    if len(rtnv) == 0:
         rtnv.append([])
 
     log.debug('%s-->%s', mod, len(rtnv[0]))
@@ -2298,7 +2305,7 @@ def showvariables(**connection_args):
         return []
     rtnv = __do_query_into_hash(conn, "SHOW VARIABLES")
     conn.close()
-    if not rtnv:
+    if len(rtnv) == 0:
         rtnv.append([])
 
     log.debug('%s-->%s', mod, len(rtnv[0]))
@@ -2326,7 +2333,7 @@ def showglobal(**connection_args):
         return []
     rtnv = __do_query_into_hash(conn, "SHOW GLOBAL VARIABLES")
     conn.close()
-    if not rtnv:
+    if len(rtnv) == 0:
         rtnv.append([])
 
     log.debug('%s-->%s', mod, len(rtnv[0]))

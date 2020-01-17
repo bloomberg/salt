@@ -94,7 +94,7 @@ try:
     import git
     import gitdb
     GITPYTHON_VERSION = _LooseVersion(git.__version__)
-except Exception:
+except Exception:  # pylint: disable=broad-except
     GITPYTHON_VERSION = None
 
 try:
@@ -132,7 +132,7 @@ try:
         GitError = pygit2.errors.GitError
     except AttributeError:
         GitError = Exception
-except Exception as exc:
+except Exception as exc:  # pylint: disable=broad-except
     # Exceptions other than ImportError can be raised in cases where there is a
     # problem with cffi (such as when python-cffi is upgraded and pygit2 tries
     # to rebuild itself against the newer cffi). Therefore, we simply will
@@ -159,8 +159,6 @@ def enforce_types(key, val):
         'ssl_verify': bool,
         'insecure_auth': bool,
         'disable_saltenv_mapping': bool,
-        'env_whitelist': 'stringlist',
-        'env_blacklist': 'stringlist',
         'saltenv_whitelist': 'stringlist',
         'saltenv_blacklist': 'stringlist',
         'refspecs': 'stringlist',
@@ -197,7 +195,7 @@ def enforce_types(key, val):
     else:
         try:
             return expected(val)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error(
                 'Failed to enforce type for key=%s with val=%s, falling back '
                 'to a string', key, val
@@ -400,17 +398,6 @@ class GitProvider(object):
                 '\'%s\'.', default_refspecs, self.role, self.id
             )
 
-        for item in ('env_whitelist', 'env_blacklist'):
-            val = getattr(self, item, None)
-            if val:
-                salt.utils.versions.warn_until(
-                    'Neon',
-                    'The gitfs_{0} config option (and {0} per-remote config '
-                    'option) have been renamed to gitfs_salt{0} (and '
-                    'salt{0}). Please update your configuration.'.format(item)
-                )
-                setattr(self, 'salt{0}'.format(item), val)
-
         # Discard the conf dictionary since we have set all of the config
         # params as attributes
         delattr(self, 'conf')
@@ -457,7 +444,7 @@ class GitProvider(object):
 
         try:
             self.new = self.init_remote()
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             msg = ('Exception caught while initializing {0} remote \'{1}\': '
                    '{2}'.format(self.role, self.id, exc))
             if isinstance(self, GitPython):
@@ -1101,7 +1088,6 @@ class GitProvider(object):
         '''
         Only needed in pygit2, included in the base class for simplicty of use
         '''
-        pass
 
     def verify_auth(self):
         '''
@@ -1139,7 +1125,7 @@ class GitPython(GitProvider):
         tgt_ref = self.get_checkout_target()
         try:
             head_sha = self.repo.rev_parse('HEAD').hexsha
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             # Should only happen the first time we are checking out, since
             # we fetch first before ever checking anything out.
             head_sha = None
@@ -1151,7 +1137,7 @@ class GitPython(GitProvider):
                 ('tags/' + tgt_ref, 'tags/' + tgt_ref)):
             try:
                 target_sha = self.repo.rev_parse(rev_parse_target).hexsha
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 # ref does not exist
                 continue
             else:
@@ -1187,7 +1173,7 @@ class GitPython(GitProvider):
                         self.id
                     )
                     return None
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 continue
             return self.check_root()
         log.error(
@@ -1317,10 +1303,10 @@ class GitPython(GitProvider):
             file_path = add_mountpoint(relpath(file_blob.path))
             files.add(file_path)
             if stat.S_ISLNK(file_blob.mode):
-                stream = six.StringIO()
+                stream = six.BytesIO()
                 file_blob.stream_data(stream)
                 stream.seek(0)
-                link_tgt = stream.read()
+                link_tgt = salt.utils.stringutils.to_str(stream.read())
                 stream.close()
                 symlinks[file_path] = link_tgt
         return files, symlinks
@@ -1347,10 +1333,10 @@ class GitPython(GitProvider):
                     # this path's object ID will be the target of the
                     # symlink. Follow the symlink and set path to the
                     # location indicated in the blob data.
-                    stream = six.StringIO()
+                    stream = six.BytesIO()
                     file_blob.stream_data(stream)
                     stream.seek(0)
-                    link_tgt = stream.read()
+                    link_tgt = salt.utils.stringutils.to_str(stream.read())
                     stream.close()
                     path = salt.utils.path.join(
                         os.path.dirname(path), link_tgt, use_posixpath=True)
@@ -1604,7 +1590,7 @@ class Pygit2(GitProvider):
                     return self.check_root()
         except GitLockError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error(
                 'Failed to checkout %s from %s remote \'%s\': %s',
                 tgt_ref, self.role, self.id, exc,
@@ -1749,7 +1735,7 @@ class Pygit2(GitProvider):
             pass
         try:
             fetch_results = origin.fetch(**fetch_kwargs)
-        except GitError as exc:
+        except GitError as exc:  # pylint: disable=broad-except
             exc_str = get_error_message(exc).lower()
             if 'unsupported url protocol' in exc_str \
                     and isinstance(self.credentials, pygit2.Keypair):
@@ -2377,7 +2363,7 @@ class GitBase(object):
                         # changes would override this value and make it
                         # incorrect.
                         changed = True
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     log.error(
                         'Exception caught while fetching %s remote \'%s\': %s',
                         self.role, repo.id, exc,
@@ -2837,7 +2823,7 @@ class GitFS(GitBase):
             for filename in glob.glob(hashes_glob):
                 try:
                     os.remove(filename)
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     pass
             # Write contents of file to their destination in the FS cache
             repo.write_file(blob, dest)
@@ -2953,14 +2939,21 @@ class GitFS(GitBase):
         if cache_match is not None:
             return cache_match
         if refresh_cache:
+            log.trace('Start rebuilding gitfs file_list cache')
             ret = {'files': set(), 'symlinks': {}, 'dirs': set()}
             if salt.utils.stringutils.is_hex(load['saltenv']) \
                     or load['saltenv'] in self.envs():
                 for repo in self.remotes:
+                    start = time.time()
                     repo_files, repo_symlinks = repo.file_list(load['saltenv'])
                     ret['files'].update(repo_files)
                     ret['symlinks'].update(repo_symlinks)
                     ret['dirs'].update(repo.dir_list(load['saltenv']))
+                    log.profile(
+                      'gitfs file_name cache rebuild repo=%s duration=%s seconds',
+                      repo.id,
+                      time.time() - start
+                    )
             ret['files'] = sorted(ret['files'])
             ret['dirs'] = sorted(ret['dirs'])
 
@@ -2971,6 +2964,7 @@ class GitFS(GitBase):
             # NOTE: symlinks are organized in a dict instead of a list, however
             # the 'symlinks' key will be defined above so it will never get to
             # the default value in the call to ret.get() below.
+            log.trace('Finished rebuilding gitfs file_list cache')
             return ret.get(form, [])
         # Shouldn't get here, but if we do, this prevents a TypeError
         return {} if form == 'symlinks' else []
@@ -3079,7 +3073,7 @@ class GitPillar(GitBase):
                     else:
                         try:
                             ldest = salt.utils.path.readlink(lcachelink)
-                        except Exception:
+                        except Exception:  # pylint: disable=broad-except
                             log.debug(
                                 'Failed to read destination of %s', lcachelink
                             )
@@ -3105,7 +3099,7 @@ class GitPillar(GitBase):
                                         shutil.rmtree(lcachelink)
                                     else:
                                         os.remove(lcachelink)
-                                except Exception as exc:
+                                except Exception as exc:  # pylint: disable=broad-except
                                     log.exception(
                                         'Failed to remove existing git_pillar '
                                         'mountpoint link %s: %s',

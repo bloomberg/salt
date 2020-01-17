@@ -134,9 +134,17 @@ def create(path,
 
     CLI Example:
 
-    .. code-block:: bash
+    .. code-block:: console
 
         salt '*' virtualenv.create /path/to/new/virtualenv
+
+     Example of using --always-copy environment variable (in case your fs doesn't support symlinks).
+     This will copy files into the virtualenv instead of symlinking them.
+
+     .. code-block:: yaml
+
+         - env:
+           - VIRTUALENV_ALWAYS_COPY: 1
     '''
     if venv_bin is None:
         # Beginning in 3.6, pyvenv has been deprecated

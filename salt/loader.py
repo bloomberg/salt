@@ -14,7 +14,6 @@ import time
 import logging
 import inspect
 import tempfile
-import threading
 import functools
 import threading
 import traceback
@@ -23,7 +22,6 @@ from zipimport import zipimporter
 
 # Import salt libs
 import salt.config
-import salt.defaults.events
 import salt.defaults.exitcodes
 import salt.syspaths
 import salt.utils.args
@@ -40,7 +38,6 @@ import salt.utils.stringutils
 from salt.exceptions import LoaderError
 from salt.template import check_render_pipe_str
 from salt.utils.decorators import Depends
-from salt.utils.thread_local_proxy import ThreadLocalProxy
 
 # Import 3rd-party libs
 from salt.ext import six
@@ -182,7 +179,7 @@ def _module_dirs(
                     loaded_entry_point = entry_point.load()
                     for path in loaded_entry_point():
                         ext_type_types.append(path)
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     log.error("Error getting module directories from %s: %s", _format_entrypoint_target(entry_point), exc)
                     log.debug("Full backtrace for module directories error", exc_info=True)
 
@@ -281,8 +278,7 @@ def minion_mods(
 
     if notify:
         with salt.utils.event.get_event('minion', opts=opts, listen=False) as evt:
-            evt.fire_event({'complete': True},
-                           tag=salt.defaults.events.MINION_MOD_COMPLETE)
+            evt.fire_event({'complete': True}, tag='/salt/minion/minion_mod_complete')
 
     return ret
 
@@ -692,6 +688,17 @@ def grain_funcs(opts, proxy=None):
     return ret
 
 
+def _format_cached_grains(cached_grains):
+    """
+    Returns cached grains with fixed types, like tuples.
+    """
+    if cached_grains.get('osrelease_info'):
+        osrelease_info = cached_grains['osrelease_info']
+        if isinstance(osrelease_info, list):
+            cached_grains['osrelease_info'] = tuple(osrelease_info)
+    return cached_grains
+
+
 def _load_cached_grains(opts, cfn):
     '''
     Returns the grains cached in cfn, or None if the cache is too old or is
@@ -724,7 +731,7 @@ def _load_cached_grains(opts, cfn):
             log.debug('Cached grains are empty, cache might be corrupted. Refreshing.')
             return None
 
-        return cached_grains
+        return _format_cached_grains(cached_grains)
     except (IOError, OSError):
         return None
 
@@ -833,7 +840,7 @@ def grains(opts, force_refresh=False, proxy=None):
             if 'grains' in parameters:
                 kwargs['grains'] = grains_data
             ret = funcs[key](**kwargs)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             if salt.utils.platform.is_proxy():
                 log.info('The following CRITICAL message may not be an error; the proxy may not be completely established yet.')
             log.critical(
@@ -869,7 +876,7 @@ def grains(opts, force_refresh=False, proxy=None):
                             salt.utils.dictupdate.update(grains_data, ret)
                         else:
                             grains_data.update(ret)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-except
                         log.critical('Failed to run proxy\'s grains function!',
                             exc_info=True
                         )
@@ -893,7 +900,7 @@ def grains(opts, force_refresh=False, proxy=None):
                     except TypeError as e:
                         log.error('Failed to serialize grains cache: %s', e)
                         raise  # re-throw for cleanup
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 log.error('Unable to write to grains cache file %s: %s', cfn, e)
                 # Based on the original exception, the file may or may not have been
                 # created. If it was, we will remove it now, as the exception means
@@ -972,7 +979,7 @@ def sdb(opts, functions=None, whitelist=None, utils=None):
             '__sdb__': functions,
             '__opts__': opts,
             '__utils__': utils,
-            '__salt__': minion_mods(opts, utils),
+            '__salt__': minion_mods(opts, utils=utils),
         },
         whitelist=whitelist,
     )
@@ -1093,75 +1100,6 @@ def _mod_type(module_path):
     return 'ext'
 
 
-def _inject_into_mod(mod, name, value, force_lock=False):
-    '''
-    Inject a variable into a module. This is used to inject "globals" like
-    ``__salt__``, ``__pillar``, or ``grains``.
-
-    Instead of injecting the value directly, a ``ThreadLocalProxy`` is created.
-    If such a proxy is already present under the specified name, it is updated
-    with the new value. This update only affects the current thread, so that
-    the same name can refer to different values depending on the thread of
-    execution.
-
-    This is important for data that is not truly global. For example, pillar
-    data might be dynamically overriden through function parameters and thus
-    the actual values available in pillar might depend on the thread that is
-    calling a module.
-
-    mod:
-        module object into which the value is going to be injected.
-
-    name:
-        name of the variable that is injected into the module.
-
-    value:
-        value that is injected into the variable. The value is not injected
-        directly, but instead set as the new reference of the proxy that has
-        been created for the variable.
-
-    force_lock:
-        whether the lock should be acquired before checking whether a proxy
-        object for the specified name has already been injected into the
-        module. If ``False`` (the default), this function checks for the
-        module's variable without acquiring the lock and only acquires the lock
-        if a new proxy has to be created and injected.
-    '''
-    old_value = getattr(mod, name, None)
-    # We use a double-checked locking scheme in order to avoid taking the lock
-    # when a proxy object has already been injected.
-    # In most programming languages, double-checked locking is considered
-    # unsafe when used without explicit memory barriers because one might read
-    # an uninitialized value. In CPython it is safe due to the global
-    # interpreter lock (GIL). In Python implementations that do not have the
-    # GIL, it could be unsafe, but at least Jython also guarantees that (for
-    # Python objects) memory is not corrupted when writing and reading without
-    # explicit synchronization
-    # (http://www.jython.org/jythonbook/en/1.0/Concurrency.html).
-    # Please note that in order to make this code safe in a runtime environment
-    # that does not make this guarantees, it is not sufficient. The
-    # ThreadLocalProxy must also be created with fallback_to_shared set to
-    # False or a lock must be added to the ThreadLocalProxy.
-    if force_lock:
-        with _inject_into_mod.lock:
-            if isinstance(old_value, ThreadLocalProxy):
-                ThreadLocalProxy.set_reference(old_value, value)
-            else:
-                setattr(mod, name, ThreadLocalProxy(value, True))
-    else:
-        if isinstance(old_value, ThreadLocalProxy):
-            ThreadLocalProxy.set_reference(old_value, value)
-        else:
-            _inject_into_mod(mod, name, value, True)
-
-
-# Lock used when injecting globals. This is needed to avoid a race condition
-# when two threads try to load the same module concurrently. This must be
-# outside the loader because there might be more than one loader for the same
-# namespace.
-_inject_into_mod.lock = threading.RLock()
-
-
 # TODO: move somewhere else?
 class FilterDictWrapper(MutableMapping):
     '''
@@ -1256,12 +1194,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
 
         for k, v in six.iteritems(self.pack):
             if v is None:  # if the value of a pack is None, lets make an empty dict
-                value = self.context_dict.get(k, {})
-
-                if isinstance(value, ThreadLocalProxy):
-                    value = ThreadLocalProxy.unproxy(value)
-
-                self.context_dict[k] = value
+                self.context_dict.setdefault(k, {})
                 self.pack[k] = salt.utils.context.NamespacedDictWrapper(self.context_dict, k)
 
         self.whitelist = whitelist
@@ -1539,21 +1472,11 @@ class LazyLoader(salt.utils.lazy.LazyDict):
         Strip out of the opts any logger instance
         '''
         if '__grains__' not in self.pack:
-            grains = opts.get('grains', {})
-
-            if isinstance(grains, ThreadLocalProxy):
-                grains = ThreadLocalProxy.unproxy(grains)
-
-            self.context_dict['grains'] = grains
+            self.context_dict['grains'] = opts.get('grains', {})
             self.pack['__grains__'] = salt.utils.context.NamespacedDictWrapper(self.context_dict, 'grains')
 
         if '__pillar__' not in self.pack:
-            pillar = opts.get('pillar', {})
-
-            if isinstance(pillar, ThreadLocalProxy):
-                pillar = ThreadLocalProxy.unproxy(pillar)
-
-            self.context_dict['pillar'] = pillar
+            self.context_dict['pillar'] = opts.get('pillar', {})
             self.pack['__pillar__'] = salt.utils.context.NamespacedDictWrapper(self.context_dict, 'pillar')
 
         mod_opts = {}
@@ -1695,7 +1618,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
             )
             self.missing_modules[name] = exc
             return False
-        except Exception as error:
+        except Exception as error:  # pylint: disable=broad-except
             log.error(
                 'Failed to import %s %s, this is due most likely to a '
                 'syntax error:\n', self.tag, name, exc_info=True
@@ -1705,7 +1628,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
         except SystemExit as error:
             try:
                 fn_, _, caller, _ = traceback.extract_tb(sys.exc_info()[2])[-1]
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
             else:
                 tgt_fn = os.path.join('salt', 'utils', 'process.py')
@@ -1730,7 +1653,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
 
         # pack whatever other globals we were asked to
         for p_name, p_value in six.iteritems(self.pack):
-            _inject_into_mod(mod, p_name, p_value)
+            setattr(mod, p_name, p_value)
 
         module_name = mod.__name__.rsplit('.', 1)[-1]
 
@@ -1741,7 +1664,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
                 module_init(self.opts)
             except TypeError as e:
                 log.error(e)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 err_string = '__init__ failed'
                 log.debug(
                     'Error loading %s.%s: %s',
@@ -1804,10 +1727,8 @@ class LazyLoader(salt.utils.lazy.LazyDict):
         ))
 
         for attr in getattr(mod, '__load__', dir(mod)):
-            if attr.startswith('_') and attr != '__call__':
-                # private functions are skipped,
-                # except __call__ which is default entrance
-                # for multi-function batch-like state syntax
+            if attr.startswith('_'):
+                # private functions are skipped
                 continue
             func = getattr(mod, attr)
             if not inspect.isfunction(func) and not isinstance(func, functools.partial):
@@ -1837,7 +1758,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
 
         # enforce depends
         try:
-            Depends.enforce_dependencies(self._dict, self.tag)
+            Depends.enforce_dependencies(self._dict, self.tag, name)
         except RuntimeError as exc:
             log.info(
                 'Depends.enforce_dependencies() failed for the following '
@@ -1968,7 +1889,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
                         msg = 'Virtual function took {0} seconds for {1}'.format(
                                 end, module_name)
                         log.warning(msg)
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     error_reason = (
                         'Exception raised when processing __virtual__ function'
                         ' for {0}. Module will not be loaded: {1}'.format(
@@ -2029,7 +1950,7 @@ class LazyLoader(salt.utils.lazy.LazyDict):
             # help debugging.
             log.debug('KeyError when loading %s', module_name, exc_info=True)
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             # If the module throws an exception during __virtual__()
             # then log the information and continue to the next.
             log.error(

@@ -649,56 +649,6 @@ Returns:
   1, 4
 
 
-.. jinja_ref:: method_call
-
-``method_call``
----------------
-
-.. versionadded:: Neon
-
-Returns a result of object's method call.
-
-Example #1:
-
-.. code-block:: jinja
-
-  {{ [1, 2, 1, 3, 4] | method_call('index', 1, 1, 3) }}
-
-Returns:
-
-.. code-block:: text
-
-  2
-
-This filter can be used with the `map filter`_ to apply object methods without
-using loop constructs or temporary variables.
-
-Example #2:
-
-.. code-block:: jinja
-
-  {% set host_list = ['web01.example.com', 'db01.example.com'] %}
-  {% set host_list_split = [] %}
-  {% for item in host_list %}
-    {% do host_list_split.append(item.split('.', 1)) %}
-  {% endfor %}
-  {{ host_list_split }}
-
-Example #3:
-
-.. code-block:: jinja
-
-  {{ host_list|map('method_call', 'split', '.', 1)|list }}
-
-Return of examples #2 and #3:
-
-.. code-block:: text
-
-  [[web01, example.com], [db01, example.com]]
-
-.. _`map filter`: http://jinja.pocoo.org/docs/2.10/templates/#map
-
-
 .. jinja_ref:: is_sorted
 
 ``is_sorted``
@@ -964,7 +914,7 @@ Example:
     Renamed from ``json_decode_list`` to ``json_encode_list``. When you encode
     something you get bytes, and when you decode, you get your locale's
     encoding (usually a ``unicode`` type). This filter was incorrectly-named
-    when it was added. ``json_decode_list`` will be supported until the Neon
+    when it was added. ``json_decode_list`` will be supported until the Aluminium
     release.
 .. deprecated:: 2018.3.3,2019.2.0
     The :jinja_ref:`tojson` filter accomplishes what this filter was designed
@@ -997,7 +947,7 @@ Returns:
     Renamed from ``json_decode_dict`` to ``json_encode_dict``. When you encode
     something you get bytes, and when you decode, you get your locale's
     encoding (usually a ``unicode`` type). This filter was incorrectly-named
-    when it was added. ``json_decode_dict`` will be supported until the Neon
+    when it was added. ``json_decode_dict`` will be supported until the Aluminium
     release.
 .. deprecated:: 2018.3.3,2019.2.0
     The :jinja_ref:`tojson` filter accomplishes what this filter was designed
@@ -1045,8 +995,8 @@ installed, then the upstream version of the filter will be used. See the
 .. versionadded:: 2017.7.0
 .. versionadded:: 2018.3.0
     Renamed from ``rand_str`` to ``random_hash`` to more accurately describe
-    what the filter does. ``rand_str`` will be supported until the Neon
-    release.
+    what the filter does. ``rand_str`` will be supported to ensure backwards
+    compatibility but please use the preferred ``random_hash``.
 
 Generates a random number between 1 and the number passed to the filter, and
 then hashes it. The default hash type is the one specified by the minion's
@@ -1074,7 +1024,7 @@ Returns:
 ``set_dict_key_value``
 ----------------------
 
-..versionadded:: Neon
+..versionadded:: 3000
 
 Allows you to set a value in a nested dictionary without having to worry if all the nested keys actually exist.
 Missing keys will be automatically created if they do not exist.
@@ -1107,7 +1057,7 @@ Example 2:
 ``append_dict_key_value``
 -------------------------
 
-..versionadded:: Neon
+..versionadded:: 3000
 
 Allows you to append to a list nested (deep) in a dictionary without having to worry if all the nested keys (or the list itself) actually exist.
 Missing keys will automatically be created if they do not exist.
@@ -1141,7 +1091,7 @@ Example 2:
 ``extend_dict_key_value``
 -------------------------
 
-..versionadded:: Neon
+..versionadded:: 3000
 
 Allows you to extend a list nested (deep) in a dictionary without having to worry if all the nested keys (or the list itself) actually exist.
 Missing keys will automatically be created if they do not exist.
@@ -1174,7 +1124,7 @@ Example 2:
 ``update_dict_key_value``
 -------------------------
 
-..versionadded:: Neon
+..versionadded:: 3000
 
 Allows you to update a dictionary nested (deep) in another dictionary without having to worry if all the nested keys actually exist.
 Missing keys will automatically be created if they do not exist.
@@ -1399,7 +1349,7 @@ Returns:
 ``json_query``
 --------------
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 A port of Ansible ``json_query`` Jinja filter to make queries against JSON data using `JMESPath language`_.
 Could be used to filter ``pillar`` data, ``yaml`` maps, and together with :jinja_ref:`http_query`.
@@ -1415,7 +1365,7 @@ Examples:
   {"machines": [
     {"name": "a", "state": "running"},
     {"name": "b", "state": "stopped"},
-    {"name": "b", "state": "running"}
+    {"name": "c", "state": "running"}
   ]} | json_query("machines[?state=='running'].name") }}
 
   Example 3: {{
@@ -1431,7 +1381,7 @@ Returns:
 
   Example 1: [1, 2, 3, 4, 5, 6]
 
-  Example 2: ['a', 'b']
+  Example 2: ['a', 'c']
 
   Example 3: [80, 25, 22]
 
@@ -1440,13 +1390,12 @@ Returns:
 .. _`JMESPath language`: http://jmespath.org/
 .. _`jmespath`: https://github.com/jmespath/jmespath.py
 
-
 .. jinja_ref:: to_snake_case
 
 ``to_snake_case``
 -----------------
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 Converts a string from camelCase (or CamelCase) to snake_case.
 
@@ -1466,7 +1415,7 @@ Returns:
 ``to_camelcase``
 ----------------
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 Converts a string from snake_case to camelCase (or UpperCamelCase if so indicated).
 
@@ -1733,9 +1682,6 @@ Example:
 Return the ip resolved by dns, but do not exit on failure, only raise an
 exception. Obeys system preference for IPv4/6 address resolution.
 
-This function tries to connect to the address/port before considering it
-valid and therefor requires a port to test. The default port tested is 80.
-
 Example:
 
 .. code-block:: jinja
@@ -1750,15 +1696,6 @@ Returns:
 
 File filters
 ------------
-
-.. jinja_ref:: connection_check
-
-``connection_check``
---------------------
-
-.. versionadded:: Neon
-
-Return the IP resolved by DNS. This is an alias of ``dns_check``.
 
 .. jinja_ref:: is_text_file
 

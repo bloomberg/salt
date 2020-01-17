@@ -3,6 +3,7 @@
 Module for managing the Salt beacons on a minion
 
 .. versionadded:: 2015.8.0
+
 '''
 
 # Import Python libs
@@ -21,7 +22,7 @@ from salt.ext.six.moves import map
 # Get logging started
 log = logging.getLogger(__name__)
 
-default_event_wait = 30
+default_event_wait = 60
 __func_alias__ = {
     'list_': 'list',
     'reload_': 'reload'
@@ -33,23 +34,18 @@ def list_(return_yaml=True,
           include_opts=True,
           **kwargs):
     '''
-    List the beacons currently configured on the minion.
+    List the beacons currently configured on the minion
 
-    Args:
+    :param return_yaml:    Whether to return YAML formatted output,
+                           default ``True``
 
-        return_yaml (bool):
-            Whether to return YAML formatted output, default ``True``.
+    :param include_pillar: Whether to include beacons that are
+                           configured in pillar, default is ``True``.
 
-        include_pillar (bool):
-            Whether to include beacons that are configured in pillar, default
-            is ``True``.
+    :param include_opts:   Whether to include beacons that are
+                           configured in opts, default is ``True``.
 
-        include_opts (bool):
-            Whether to include beacons that are configured in opts, default is
-            ``True``.
-
-    Returns:
-        list: List of currently configured Beacons.
+    :return:               List of currently configured Beacons.
 
     CLI Example:
 
@@ -69,16 +65,15 @@ def list_(return_yaml=True,
             if res:
                 event_ret = event_bus.get_event(
                     tag='/salt/minion/minion_beacons_list_complete',
-                    wait=default_event_wait,
-                )
+                    wait=kwargs.get('timeout', default_event_wait))
                 log.debug('event_ret %s', event_ret)
                 if event_ret and event_ret['complete']:
                     beacons = event_ret['beacons']
     except KeyError:
-        # Effectively a no-op, since we can't really return without an event
-        # system
-        ret = {'comment': 'Event module not available. Beacon list failed.',
-               'result': False}
+        # Effectively a no-op, since we can't really return without an event system
+        ret = {}
+        ret['result'] = False
+        ret['comment'] = 'Event module not available. Beacon add failed.'
         return ret
 
     if beacons:
@@ -93,15 +88,11 @@ def list_(return_yaml=True,
 
 def list_available(return_yaml=True, **kwargs):
     '''
-    List the beacons currently available on the minion.
+    List the beacons currently available on the minion
 
-    Args:
-
-        return_yaml (bool):
-            Whether to return YAML formatted output, default ``True``.
-
-    returns:
-        list: List of currently available Beacons.
+    :param return_yaml:     Whether to return YAML formatted output, default
+                            ``True``
+    :return:                List of currently configured Beacons.
 
     CLI Example:
 
@@ -118,16 +109,14 @@ def list_available(return_yaml=True, **kwargs):
             if res:
                 event_ret = event_bus.get_event(
                     tag='/salt/minion/minion_beacons_list_available_complete',
-                    wait=default_event_wait,
-                )
+                    wait=kwargs.get('timeout', default_event_wait))
                 if event_ret and event_ret['complete']:
                     beacons = event_ret['beacons']
     except KeyError:
-        # Effectively a no-op, since we can't really return without an event
-        # system
-        ret = {'comment': 'Event module not available. Beacon list_available '
-                          'failed.',
-               'result': False}
+        # Effectively a no-op, since we can't really return without an event system
+        ret = {}
+        ret['result'] = False
+        ret['comment'] = 'Event module not available. Beacon add failed.'
         return ret
 
     if beacons:
@@ -144,16 +133,9 @@ def add(name, beacon_data, **kwargs):
     '''
     Add a beacon on the minion
 
-    Args:
-
-        name (str):
-            Name of the beacon to configure
-
-        beacon_data (dict):
-            Dictionary or list containing configuration for beacon.
-
-    Returns:
-        dict: Boolean and status message on success or failure of add.
+    :param name:            Name of the beacon to configure
+    :param beacon_data:     Dictionary or list containing configuration for beacon.
+    :return:                Boolean and status message on success or failure of add.
 
     CLI Example:
 
@@ -169,16 +151,8 @@ def add(name, beacon_data, **kwargs):
         ret['comment'] = 'Beacon {0} is already configured.'.format(name)
         return ret
 
-    # Check to see if a beacon_module is specified, if so, verify it is
-    # valid and available beacon type.
-    if any('beacon_module' in key for key in beacon_data):
-        res = next(value for value in beacon_data if 'beacon_module' in value)
-        beacon_name = res['beacon_module']
-    else:
-        beacon_name = name
-
-    if beacon_name not in list_available(return_yaml=False, **kwargs):
-        ret['comment'] = 'Beacon "{0}" is not available.'.format(beacon_name)
+    if name not in list_available(return_yaml=False, **kwargs):
+        ret['comment'] = 'Beacon "{0}" is not available.'.format(name)
         return ret
 
     if 'test' in kwargs and kwargs['test']:
@@ -195,8 +169,7 @@ def add(name, beacon_data, **kwargs):
                 if res:
                     event_ret = event_bus.get_event(
                        tag='/salt/minion/minion_beacon_validation_complete',
-                       wait=default_event_wait,
-                    )
+                       wait=kwargs.get('timeout', default_event_wait))
                     valid = event_ret['valid']
                     vcomment = event_ret['vcomment']
 
@@ -206,11 +179,8 @@ def add(name, beacon_data, **kwargs):
                                       'not adding.\n{1}'.format(name, vcomment))
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
+            # Effectively a no-op, since we can't really return without an event system
             ret['comment'] = 'Event module not available. Beacon add failed.'
-            return ret
 
         try:
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
@@ -220,39 +190,34 @@ def add(name, beacon_data, **kwargs):
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_add_complete',
-                        wait=default_event_wait,
-                    )
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         if name in beacons and beacons[name] == beacon_data:
                             ret['result'] = True
                             ret['comment'] = 'Added beacon: {0}.'.format(name)
-                    else:
+                    elif event_ret:
                         ret['result'] = False
                         ret['comment'] = event_ret['comment']
+                    else:
+                        ret['result'] = False
+                        ret['comment'] = 'Did not receive the beacon add complete event before the timeout of {}s'.format(
+                            kwargs.get('timeout', default_event_wait)
+                        )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
+            # Effectively a no-op, since we can't really return without an event system
             ret['comment'] = 'Event module not available. Beacon add failed.'
     return ret
 
 
 def modify(name, beacon_data, **kwargs):
     '''
-    Modify an existing beacon.
+    Modify an existing beacon
 
-    Args:
-
-        name (str):
-            Name of the beacon to configure.
-
-        beacon_data (dict):
-            Dictionary or list containing updated configuration for beacon.
-
-    Returns:
-        dict: Boolean and status message on success or failure of modify.
+    :param name:            Name of the beacon to configure
+    :param beacon_data:     Dictionary or list containing updated configuration for beacon.
+    :return:                Boolean and status message on success or failure of modify.
 
     CLI Example:
 
@@ -271,7 +236,7 @@ def modify(name, beacon_data, **kwargs):
 
     if 'test' in kwargs and kwargs['test']:
         ret['result'] = True
-        ret['comment'] = 'Beacon: {0} would be modified.'.format(name)
+        ret['comment'] = 'Beacon: {0} would be added.'.format(name)
     else:
         try:
             # Attempt to load the beacon module so we have access to the validate function
@@ -282,8 +247,8 @@ def modify(name, beacon_data, **kwargs):
                                              'manage_beacons')
                 if res:
                     event_ret = event_bus.get_event(
-                            tag='/salt/minion/minion_beacon_validation_complete',
-                            wait=default_event_wait)
+                        tag='/salt/minion/minion_beacon_validation_complete',
+                        wait=kwargs.get('timeout', default_event_wait))
                     valid = event_ret['valid']
                     vcomment = event_ret['vcomment']
 
@@ -292,12 +257,10 @@ def modify(name, beacon_data, **kwargs):
                     ret['comment'] = ('Beacon {0} configuration invalid, '
                                       'not adding.\n{1}'.format(name, vcomment))
                     return ret
+
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
+            # Effectively a no-op, since we can't really return without an event system
             ret['comment'] = 'Event module not available. Beacon modify failed.'
-            return ret
 
         if not valid:
             ret['result'] = False
@@ -327,14 +290,11 @@ def modify(name, beacon_data, **kwargs):
 
         try:
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
-                res = __salt__['event.fire']({'name': name,
-                                              'beacon_data': beacon_data,
-                                              'func': 'modify'},
-                                             'manage_beacons')
+                res = __salt__['event.fire']({'name': name, 'beacon_data': beacon_data, 'func': 'modify'}, 'manage_beacons')
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_modify_complete',
-                        wait=default_event_wait)
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         if name in beacons and beacons[name] == beacon_data:
@@ -345,27 +305,22 @@ def modify(name, beacon_data, **kwargs):
                         ret['comment'] = event_ret['comment']
                     else:
                         ret['result'] = False
-                        ret['comment'] = 'Did not receive the manage event ' \
-                                         'before the timeout of {0}s' \
-                                         ''.format(kwargs.get('timeout', 30))
+                        ret['comment'] = 'Did not receive the beacon modify complete  event before the timeout of {}s'.format(
+                            kwargs.get('timeout', default_event_wait)
+                        )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacon modify failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacon add failed.'
     return ret
 
 
 def delete(name, **kwargs):
     '''
-    Delete a beacon item.
+    Delete a beacon item
 
-    Args:
-        name (str): Name of the beacon to delete.
-
-    Returns:
-        dict: Boolean and status message on success or failure of delete.
+    :param name:            Name of the beacon to delete
+    :return:                Boolean and status message on success or failure of delete.
 
     CLI Example:
 
@@ -386,13 +341,11 @@ def delete(name, **kwargs):
     else:
         try:
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
-                res = __salt__['event.fire']({'name': name,
-                                              'func': 'delete'},
-                                             'manage_beacons')
+                res = __salt__['event.fire']({'name': name, 'func': 'delete'}, 'manage_beacons')
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_delete_complete',
-                        wait=default_event_wait)
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         if name not in beacons:
@@ -404,23 +357,20 @@ def delete(name, **kwargs):
                         ret['comment'] = event_ret['comment']
                     else:
                         ret['result'] = False
-                        ret['comment'] = 'Did not receive the manage event ' \
-                                         'before the timeout of {0}s' \
-                                         ''.format(kwargs.get('timeout', 30))
+                        ret['comment'] = 'Did not receive the beacon delete complete event before the timeout of {}s'.format(
+                            kwargs.get('timeout', default_event_wait)
+                        )
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacon delete failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacon add failed.'
     return ret
 
 
 def save(**kwargs):
     '''
-    Save all configured beacons to the minion config.
+    Save all beacons on the minion
 
-    Returns:
-        dict: Boolean and status message on success or failure of save.
+    :return:                Boolean and status message on success or failure of save.
 
     CLI Example:
 
@@ -457,7 +407,7 @@ def save(**kwargs):
 
 def enable(**kwargs):
     '''
-    Enable all beacons on the minion.
+    Enable all beacons on the minion
 
     Returns:
         bool: Boolean and status message on success or failure of enable.
@@ -479,31 +429,34 @@ def enable(**kwargs):
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
                 res = __salt__['event.fire']({'func': 'enable'}, 'manage_beacons')
                 if res:
-                    event_ret = event_bus.get_event(tag='/salt/minion/minion_beacons_enabled_complete', wait=default_event_wait)
+                    event_ret = event_bus.get_event(
+                        tag='/salt/minion/minion_beacons_enabled_complete',
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         if 'enabled' in beacons and beacons['enabled']:
                             ret['result'] = True
                             ret['comment'] = 'Enabled beacons on minion.'
-                        else:
+                        elif event_ret:
                             ret['result'] = False
                             ret['comment'] = 'Failed to enable beacons on minion.'
+                        else:
+                            ret['result'] = False
+                            ret['comment'] = 'Did not receive the beacon enabled complete event before the timeout of {}s'.format(
+                                kwargs.get('timeout', default_event_wait)
+                            )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacons enable job ' \
-                             'failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacons enable job failed.'
     return ret
 
 
 def disable(**kwargs):
     '''
-    Disable all beacons jobs on the minion.
+    Disable all beacons jobs on the minion
 
-    Returns:
-        dict: Boolean and status message on success or failure of disable.
+    :return:                Boolean and status message on success or failure of disable.
 
     CLI Example:
 
@@ -522,23 +475,27 @@ def disable(**kwargs):
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
                 res = __salt__['event.fire']({'func': 'disable'}, 'manage_beacons')
                 if res:
-                    event_ret = event_bus.get_event(tag='/salt/minion/minion_beacons_disabled_complete', wait=default_event_wait)
+                    event_ret = event_bus.get_event(
+                        tag='/salt/minion/minion_beacons_disabled_complete',
+                        wait=kwargs.get('timeout', default_event_wait))
                     log.debug('event_ret %s', event_ret)
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         if 'enabled' in beacons and not beacons['enabled']:
                             ret['result'] = True
                             ret['comment'] = 'Disabled beacons on minion.'
-                        else:
+                        elif event_ret:
                             ret['result'] = False
                             ret['comment'] = 'Failed to disable beacons on minion.'
+                        else:
+                            ret['result'] = False
+                            ret['comment'] = 'Did not receive the beacon disabled complete event before the timeout of {}s'.format(
+                                kwargs.get('timeout', default_event_wait)
+                            )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacons disable ' \
-                             'job failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacons enable job failed.'
     return ret
 
 
@@ -554,13 +511,10 @@ def _get_beacon_config_dict(beacon_config):
 
 def enable_beacon(name, **kwargs):
     '''
-    Enable a beacon on the minion.
+    Enable beacon on the minion
 
-    Args:
-        name (str): Name of the beacon to enable.
-
-    Returns:
-        dict: Boolean and status message on success or failure of enable.
+    :name:                  Name of the beacon to enable.
+    :return:                Boolean and status message on success or failure of enable.
 
     CLI Example:
 
@@ -582,59 +536,48 @@ def enable_beacon(name, **kwargs):
     else:
         _beacons = list_(return_yaml=False, **kwargs)
         if name not in _beacons:
-            ret['comment'] = 'Beacon {0} is not currently configured.' \
-                             ''.format(name)
+            ret['comment'] = 'Beacon {0} is not currently configured.'.format(name)
             ret['result'] = False
             return ret
 
         try:
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
-                res = __salt__['event.fire']({'func': 'enable_beacon',
-                                              'name': name},
-                                             'manage_beacons')
+                res = __salt__['event.fire']({'func': 'enable_beacon', 'name': name}, 'manage_beacons')
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_enabled_complete',
-                        wait=default_event_wait)
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         beacon_config_dict = _get_beacon_config_dict(beacons[name])
 
                         if 'enabled' in beacon_config_dict and beacon_config_dict['enabled']:
                             ret['result'] = True
-                            ret['comment'] = 'Enabled beacon {0} on minion.' \
-                                             ''.format(name)
+                            ret['comment'] = 'Enabled beacon {0} on minion.'.format(name)
                         else:
                             ret['result'] = False
-                            ret['comment'] = 'Failed to enable beacon {0} on ' \
-                                             'minion.'.format(name)
+                            ret['comment'] = 'Failed to enable beacon {0} on minion.'.format(name)
                     elif event_ret:
                         ret['result'] = False
                         ret['comment'] = event_ret['comment']
                     else:
                         ret['result'] = False
-                        ret['comment'] = 'Did not receive the enable beacon event ' \
-                                         'before the timeout of {0}s' \
-                                         ''.format(default_event_wait)
+                        ret['comment'] = 'Did not receive the beacon enabled complete event before the timeout of {}s'.format(
+                            kwargs.get('timeout', default_event_wait)
+                        )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacon enable job ' \
-                             'failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacon enable job failed.'
     return ret
 
 
 def disable_beacon(name, **kwargs):
     '''
-    Disable a beacon on the minion.
+    Disable beacon on the minion
 
-    Args:
-        name (str): Name of the beacon to disable.
-
-    Returns:
-        dict: Boolean and status message on success or failure of disable.
+    :name:                  Name of the beacon to disable.
+    :return:                Boolean and status message on success or failure of disable.
 
     CLI Example:
 
@@ -652,32 +595,28 @@ def disable_beacon(name, **kwargs):
         return ret
 
     if 'test' in kwargs and kwargs['test']:
-        ret['comment'] = 'Beacons would be disabled.'
+        ret['comment'] = 'Beacons would be enabled.'
     else:
         _beacons = list_(return_yaml=False, **kwargs)
         if name not in _beacons:
-            ret['comment'] = 'Beacon {0} is not currently configured.' \
-                             ''.format(name)
+            ret['comment'] = 'Beacon {0} is not currently configured.'.format(name)
             ret['result'] = False
             return ret
 
         try:
             with salt.utils.event.get_event('minion', opts=__opts__, listen=True) as event_bus:
-                res = __salt__['event.fire']({'func': 'disable_beacon',
-                                              'name': name},
-                                             'manage_beacons')
+                res = __salt__['event.fire']({'func': 'disable_beacon', 'name': name}, 'manage_beacons')
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_disabled_complete',
-                        wait=default_event_wait)
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         beacons = event_ret['beacons']
                         beacon_config_dict = _get_beacon_config_dict(beacons[name])
 
                         if 'enabled' in beacon_config_dict and not beacon_config_dict['enabled']:
                             ret['result'] = True
-                            ret['comment'] = 'Disabled beacon {0} on minion.' \
-                                             ''.format(name)
+                            ret['comment'] = 'Disabled beacon {0} on minion.'.format(name)
                         else:
                             ret['result'] = False
                             ret['comment'] = 'Failed to disable beacon on minion.'
@@ -686,22 +625,19 @@ def disable_beacon(name, **kwargs):
                         ret['comment'] = event_ret['comment']
                     else:
                         ret['result'] = False
-                        ret['comment'] = 'Did not receive the disable beacon event ' \
-                                         'before the timeout of {0}s' \
-                                         ''.format(default_event_wait)
+                        ret['comment'] = 'Did not receive the beacon disabled complete event before the timeout of {}s'.format(
+                            kwargs.get('timeout', default_event_wait)
+                        )
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacon disable job ' \
-                             'failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacon disable job failed.'
     return ret
 
 
 def reset(**kwargs):
     '''
-    Reset the beacon configuration on the minion.
+    Resest beacon configuration on the minion
 
     CLI Example:
 
@@ -722,23 +658,18 @@ def reset(**kwargs):
                 if res:
                     event_ret = event_bus.get_event(
                         tag='/salt/minion/minion_beacon_reset_complete',
-                        wait=default_event_wait)
+                        wait=kwargs.get('timeout', default_event_wait))
                     if event_ret and event_ret['complete']:
                         ret['result'] = True
                         ret['comment'] = 'Beacon configuration reset.'
-                    elif event_ret:
-                        ret['result'] = False
-                        ret['comment'] = event_ret['comment']
                     else:
                         ret['result'] = False
-                        ret['comment'] = 'Did not receive the reset beacon event ' \
-                                         'before the timeout of {0}s' \
-                                         ''.format(default_event_wait)
+                        if ret is not None:
+                            ret['comment'] = event_ret['comment']
+                        else:
+                            ret['comment'] = 'Beacon reset event never received'
                     return ret
         except KeyError:
-            # Effectively a no-op, since we can't really return without an event
-            # system
-            ret['result'] = False
-            ret['comment'] = 'Event module not available. Beacon reset job ' \
-                             'failed.'
+            # Effectively a no-op, since we can't really return without an event system
+            ret['comment'] = 'Event module not available. Beacon disable job failed.'
     return ret

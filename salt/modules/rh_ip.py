@@ -118,7 +118,7 @@ def _parse_rh_config(path):
     if rh_config:
         for line in rh_config:
             line = line.strip()
-            if not line or line.startswith('!') or line.startswith('#'):
+            if len(line) == 0 or line.startswith('!') or line.startswith('#'):
                 continue
             pair = [p.rstrip() for p in line.split('=', 1)]
             if len(pair) != 2:
@@ -293,7 +293,7 @@ def _parse_settings_bond_0(opts, iface, bond_def):
             if 1 <= len(opts['arp_ip_target']) <= 16:
                 bond.update({'arp_ip_target': ''})
                 for ip in opts['arp_ip_target']:  # pylint: disable=C0103
-                    if bond['arp_ip_target']:
+                    if len(bond['arp_ip_target']) > 0:
                         bond['arp_ip_target'] = bond['arp_ip_target'] + ',' + ip
                     else:
                         bond['arp_ip_target'] = ip
@@ -308,7 +308,7 @@ def _parse_settings_bond_0(opts, iface, bond_def):
         try:
             int(opts['arp_interval'])
             bond.update({'arp_interval': opts['arp_interval']})
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             _raise_error_iface(iface, 'arp_interval', ['integer'])
     else:
         _log_default_iface(iface, 'arp_interval', bond_def['arp_interval'])
@@ -332,7 +332,7 @@ def _parse_settings_bond_1(opts, iface, bond_def):
             try:
                 int(opts[binding])
                 bond.update({binding: opts[binding]})
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _raise_error_iface(iface, binding, ['integer'])
         else:
             _log_default_iface(iface, binding, bond_def[binding])
@@ -372,7 +372,7 @@ def _parse_settings_bond_2(opts, iface, bond_def):
             if 1 <= len(opts['arp_ip_target']) <= 16:
                 bond.update({'arp_ip_target': ''})
                 for ip in opts['arp_ip_target']:  # pylint: disable=C0103
-                    if bond['arp_ip_target']:
+                    if len(bond['arp_ip_target']) > 0:
                         bond['arp_ip_target'] = bond['arp_ip_target'] + ',' + ip
                     else:
                         bond['arp_ip_target'] = ip
@@ -387,7 +387,7 @@ def _parse_settings_bond_2(opts, iface, bond_def):
         try:
             int(opts['arp_interval'])
             bond.update({'arp_interval': opts['arp_interval']})
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             _raise_error_iface(iface, 'arp_interval', ['integer'])
     else:
         _log_default_iface(iface, 'arp_interval', bond_def['arp_interval'])
@@ -418,7 +418,7 @@ def _parse_settings_bond_3(opts, iface, bond_def):
             try:
                 int(opts[binding])
                 bond.update({binding: opts[binding]})
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _raise_error_iface(iface, binding, ['integer'])
         else:
             _log_default_iface(iface, binding, bond_def[binding])
@@ -462,7 +462,7 @@ def _parse_settings_bond_4(opts, iface, bond_def):
             try:
                 int(opts[binding])
                 bond.update({binding: opts[binding]})
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _raise_error_iface(iface, binding, valid)
         else:
             _log_default_iface(iface, binding, bond_def[binding])
@@ -505,7 +505,7 @@ def _parse_settings_bond_5(opts, iface, bond_def):
             try:
                 int(opts[binding])
                 bond.update({binding: opts[binding]})
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _raise_error_iface(iface, binding, ['integer'])
         else:
             _log_default_iface(iface, binding, bond_def[binding])
@@ -544,7 +544,7 @@ def _parse_settings_bond_6(opts, iface, bond_def):
             try:
                 int(opts[binding])
                 bond.update({binding: opts[binding]})
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _raise_error_iface(iface, binding, ['integer'])
         else:
             _log_default_iface(iface, binding, bond_def[binding])
@@ -588,7 +588,7 @@ def _parse_settings_vlan(opts, iface):
             _raise_error_iface(iface, 'vlan_id', 'Positive integer')
 
     if 'phys_dev' in opts:
-        if opts['phys_dev']:
+        if len(opts['phys_dev']) > 0:
             vlan.update({'phys_dev': opts['phys_dev']})
         else:
             _raise_error_iface(iface, 'phys_dev', 'Non-empty string')
@@ -877,7 +877,7 @@ def _parse_network_settings(opts, current):
         try:
             opts['hostname'] = current['hostname']
             _log_default_network('hostname', current['hostname'])
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             _raise_error_network('hostname', ['server1.example.com'])
 
     if opts['hostname']:
@@ -942,7 +942,7 @@ def _read_file(path):
             except ValueError:
                 pass
             return lines
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         return []  # Return empty list for type consistency
 
 
@@ -1032,6 +1032,14 @@ def build_interface(iface, iface_type, enabled, **settings):
             rh_major = '7'
         else:
             rh_major = '6'
+    elif __grains__['os'] == 'Amazon':
+        # TODO: Is there a better formula for this? -W. Werner, 2019-05-30
+        # If not, it will need to be updated whenever Amazon releases
+        # Amazon Linux 3
+        if __grains__['osmajorrelease'] == 2:
+            rh_major = '7'
+        else:
+            rh_major = '6'
     else:
         rh_major = __grains__['osrelease'][:1]
 
@@ -1094,11 +1102,14 @@ def build_routes(iface, **settings):
     log.debug('Template name: %s', template)
 
     opts = _parse_routes(iface, settings)
-    log.debug('Opts: \n %s', opts)
+    log.debug("Opts: \n %s", opts)
     try:
         template = JINJA.get_template(template)
     except jinja2.exceptions.TemplateNotFound:
-        log.error('Could not load template %s', template)
+        log.error(
+            'Could not load template %s',
+            template
+        )
         return ''
     opts6 = []
     opts4 = []

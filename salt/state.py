@@ -25,7 +25,6 @@ import traceback
 import re
 import time
 import random
-import collections
 
 # Import salt libs
 import salt.loader
@@ -41,7 +40,7 @@ import salt.utils.event
 import salt.utils.files
 import salt.utils.hashutils
 import salt.utils.immutabletypes as immutabletypes
-import salt.utils.msgpack as msgpack
+import salt.utils.msgpack
 import salt.utils.platform
 import salt.utils.process
 import salt.utils.url
@@ -73,7 +72,6 @@ STATE_REQUISITE_KEYWORDS = frozenset([
     'onchanges_any',
     'onfail',
     'onfail_any',
-    'onfail_all',
     'onfail_stop',
     'prereq',
     'prerequired',
@@ -119,11 +117,8 @@ STATE_RUNTIME_KEYWORDS = frozenset([
     '__orchestration_jid__',
     '__pub_user',
     '__pub_arg',
-    '__pub_id',
     '__pub_jid',
     '__pub_fun',
-    '__pub_fun_args',
-    '__pub_schedule',
     '__pub_tgt',
     '__pub_ret',
     '__pub_pid',
@@ -367,7 +362,6 @@ class StateError(Exception):
     '''
     Custom exception class.
     '''
-    pass
 
 
 class Compiler(object):
@@ -778,7 +772,7 @@ class State(object):
                         renderers=getattr(self, 'rend', None),
                         opts=self.opts,
                         valid_rend=self.opts['decrypt_pillar_renderers'])
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     log.error('Failed to decrypt pillar override: %s', exc)
 
             if isinstance(self._pillar_override, six.string_types):
@@ -790,7 +784,7 @@ class State(object):
                     self._pillar_override = yamlloader.load(
                         self._pillar_override,
                         Loader=yamlloader.SaltYamlSafeLoader)
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     log.error('Failed to load CLI pillar override')
                     log.exception(exc)
 
@@ -875,6 +869,17 @@ class State(object):
 
         return ret
 
+    def _run_check_function(self, entry):
+        """Format slot args and run unless/onlyif function."""
+        fun = entry.pop('fun')
+        args = entry.pop('args') if 'args' in entry else []
+        cdata = {
+            'args': args,
+            'kwargs': entry
+        }
+        self.format_slots(cdata)
+        return self.functions[fun](*cdata['args'], **cdata['kwargs'])
+
     def _run_check_onlyif(self, low_data, cmd_opts):
         '''
         Check that unless doesn't return 0, and that onlyif returns a 0.
@@ -906,10 +911,7 @@ class State(object):
                     log.warning(ret['comment'])
                     return ret
 
-                if 'args' in entry:
-                    result = self.functions[entry.pop('fun')](*entry.pop('args'), **entry)
-                else:
-                    result = self.functions[entry.pop('fun')](**entry)
+                result = self._run_check_function(entry)
                 if self.state_con.get('retcode', 0):
                     _check_cmd(self.state_con['retcode'])
                 elif not result:
@@ -954,10 +956,7 @@ class State(object):
                     log.warning(ret['comment'])
                     return ret
 
-                if 'args' in entry:
-                    result = self.functions[entry.pop('fun')](*entry.pop('args'), **entry)
-                else:
-                    result = self.functions[entry.pop('fun')](**entry)
+                result = self._run_check_function(entry)
                 if self.state_con.get('retcode', 0):
                     _check_cmd(self.state_con['retcode'])
                 elif result:
@@ -1407,9 +1406,8 @@ class State(object):
                 names = []
                 if state.startswith('__'):
                     continue
-                chunk = OrderedDict()
-                chunk['state'] = state
-                chunk['name'] = name
+                chunk = {'state': state,
+                         'name': name}
                 if orchestration_jid is not None:
                     chunk['__orchestration_jid__'] = orchestration_jid
                 if '__sls__' in body:
@@ -1575,9 +1573,6 @@ class State(object):
         req_in_all = req_in.union({'require', 'watch', 'onfail', 'onfail_stop', 'onchanges'})
         extend = {}
         errors = []
-        disabled_reqs = self.opts.get('disabled_requisites', [])
-        if not isinstance(disabled_reqs, list):
-            disabled_reqs = [disabled_reqs]
         for id_, body in six.iteritems(high):
             if not isinstance(body, dict):
                 continue
@@ -1588,16 +1583,13 @@ class State(object):
                     if isinstance(arg, dict):
                         # It is not a function, verify that the arg is a
                         # requisite in statement
-                        if not arg:
+                        if len(arg) < 1:
                             # Empty arg dict
                             # How did we get this far?
                             continue
                         # Split out the components
                         key = next(iter(arg))
                         if key not in req_in:
-                            continue
-                        if key in disabled_reqs:
-                            log.warning('The %s requisite has been disabled, Ignoring.', key)
                             continue
                         rkey = key.split('_')[0]
                         items = arg[key]
@@ -1666,7 +1658,7 @@ class State(object):
                                                             found = True
                                         if not found:
                                             continue
-                                if not ind:
+                                if len(ind) < 1:
                                     continue
                                 pstate = next(iter(ind))
                                 pname = ind[pstate]
@@ -1806,7 +1798,7 @@ class State(object):
         try:
             ret = self.states[cdata['full']](*cdata['args'],
                                              **cdata['kwargs'])
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.debug('An exception occurred in this state: %s', exc,
                       exc_info_on_loglevel=logging.DEBUG)
             trb = traceback.format_exc()
@@ -1850,7 +1842,7 @@ class State(object):
         if not name:
             name = low.get('name', low.get('__id__'))
 
-        proc = salt.utils.process.MultiprocessingProcess(
+        proc = salt.utils.process.Process(
                 target=self._call_parallel_target,
                 args=(name, cdata, low))
         proc.start()
@@ -1867,11 +1859,6 @@ class State(object):
         Call a state directly with the low data structure, verify data
         before processing.
         '''
-        use_uptime = False
-        if os.path.isfile('/proc/uptime'):
-            use_uptime = True
-            with salt.utils.files.fopen('/proc/uptime', 'r') as fp_:
-                start_uptime = float(fp_.readline().split()[0])
         utc_start_time = datetime.datetime.utcnow()
         local_start_time = utc_start_time - (datetime.datetime.utcnow() - datetime.datetime.now())
         log.info('Running state [%s] at time %s',
@@ -1990,16 +1977,12 @@ class State(object):
                         ret = self.call_parallel(cdata, low)
                     else:
                         self.format_slots(cdata)
-                        if cdata['full'].split('.')[-1] == '__call__':
-                            # __call__ requires OrderedDict to preserve state order
-                            # kwargs are also invalid overall
-                            ret = self.states[cdata['full']](cdata['args'], module=None, state=cdata['kwargs'])
-                        else:
-                            ret = self.states[cdata['full']](*cdata['args'], **cdata['kwargs'])
+                        ret = self.states[cdata['full']](*cdata['args'],
+                                                         **cdata['kwargs'])
                 self.states.inject_globals = {}
             if 'check_cmd' in low and '{0[state]}.mod_run_check_cmd'.format(low) not in self.states:
                 ret.update(self._run_check_cmd(low))
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.debug('An exception occurred in this state: %s', exc,
                       exc_info_on_loglevel=logging.DEBUG)
             trb = traceback.format_exc()
@@ -2044,20 +2027,14 @@ class State(object):
         self.__run_num += 1
         format_log(ret)
         self.check_refresh(low, ret)
-        if use_uptime:
-            with salt.utils.files.fopen('/proc/uptime', 'r') as fp_:
-                finish_uptime = float(fp_.readline().split()[0])
         utc_finish_time = datetime.datetime.utcnow()
         timezone_delta = datetime.datetime.utcnow() - datetime.datetime.now()
         local_finish_time = utc_finish_time - timezone_delta
         local_start_time = utc_start_time - timezone_delta
         ret['start_time'] = local_start_time.time().isoformat()
-        if use_uptime:
-            duration = (finish_uptime - start_uptime) * 1000.0
-        else:
-            delta = (utc_finish_time - utc_start_time)
-            # duration in milliseconds.microseconds
-            duration = (delta.seconds * 1000000 + delta.microseconds) / 1000.0
+        delta = (utc_finish_time - utc_start_time)
+        # duration in milliseconds.microseconds
+        duration = (delta.seconds * 1000000 + delta.microseconds) / 1000.0
         ret['duration'] = duration
         ret['__id__'] = low['__id__']
         log.info(
@@ -2331,7 +2308,7 @@ class State(object):
                     with salt.utils.files.fopen(pause_path, 'rb') as fp_:
                         try:
                             pdat = msgpack_deserialize(fp_.read())
-                        except msgpack.UnpackValueError:
+                        except salt.utils.msgpack.exceptions.UnpackValueError:
                             # Reading race condition
                             if tries > 10:
                                 # Break out if there are a ton of read errors
@@ -2355,7 +2332,7 @@ class State(object):
                         else:
                             return 'run'
                         time.sleep(1)
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 log.error('Failed to read in pause data for file located at: %s', pause_path)
                 return 'run'
         return 'run'
@@ -2397,9 +2374,6 @@ class State(object):
         Look into the running data to check the status of all requisite
         states
         '''
-        disabled_reqs = self.opts.get('disabled_requisites', [])
-        if not isinstance(disabled_reqs, list):
-            disabled_reqs = [disabled_reqs]
         present = False
         # If mod_watch is not available make it a require
         if 'watch' in low:
@@ -2430,8 +2404,6 @@ class State(object):
             present = True
         if 'onfail_any' in low:
             present = True
-        if 'onfail_all' in low:
-            present = True
         if 'onchanges' in low:
             present = True
         if 'onchanges_any' in low:
@@ -2447,16 +2419,12 @@ class State(object):
                 'prereq': [],
                 'onfail': [],
                 'onfail_any': [],
-                'onfail_all': [],
                 'onchanges': [],
                 'onchanges_any': []}
         if pre:
             reqs['prerequired'] = []
         for r_state in reqs:
             if r_state in low and low[r_state] is not None:
-                if r_state in disabled_reqs:
-                    log.warning('The %s requisite has been disabled, Ignoring.', r_state)
-                    continue
                 for req in low[r_state]:
                     if isinstance(req, six.string_types):
                         req = {'id': req}
@@ -2539,7 +2507,7 @@ class State(object):
                 else:
                     if run_dict[tag].get('__state_ran__', True):
                         req_stats.add('met')
-            if r_state.endswith('_any') or r_state == 'onfail':
+            if r_state.endswith('_any'):
                 if 'met' in req_stats or 'change' in req_stats:
                     if 'fail' in req_stats:
                         req_stats.remove('fail')
@@ -2549,14 +2517,8 @@ class State(object):
                     if 'fail' in req_stats:
                         req_stats.remove('fail')
                 if 'onfail' in req_stats:
-                    # a met requisite in this case implies a success
-                    if 'met' in req_stats:
+                    if 'fail' in req_stats:
                         req_stats.remove('onfail')
-            if r_state.endswith('_all'):
-                if 'onfail' in req_stats:
-                    # a met requisite in this case implies a failure
-                    if 'met' in req_stats:
-                        req_stats.remove('met')
             fun_stats.update(req_stats)
 
         if 'unmet' in fun_stats:
@@ -2568,8 +2530,8 @@ class State(object):
                 status = 'met'
             else:
                 status = 'pre'
-        elif 'onfail' in fun_stats and 'onchangesmet' not in fun_stats:
-            status = 'onfail'
+        elif 'onfail' in fun_stats and 'met' not in fun_stats:
+            status = 'onfail'  # all onfail states are OK
         elif 'onchanges' in fun_stats and 'onchangesmet' not in fun_stats:
             status = 'onchanges'
         elif 'change' in fun_stats:
@@ -2844,7 +2806,6 @@ class State(object):
             else:
                 running[tag] = self.call(low, chunks, running)
         if tag in running:
-            running[tag]['__saltfunc__'] = '{0}.{1}'.format(low['state'], low['fun'])
             self.event(running[tag], len(chunks), fire_event=low.get('fire_event'))
         return running
 
@@ -2921,33 +2882,10 @@ class State(object):
         running.update(errors)
         return running
 
-    def inject_default_call(self, high):
-        '''
-        Sets .call function to a state, if not there.
-
-        :param high:
-        :return:
-        '''
-        for chunk in high:
-            state = high[chunk]
-            if not isinstance(state, collections.Mapping):
-                continue
-            for state_ref in state:
-                needs_default = True
-                if not isinstance(state[state_ref], list):
-                    continue
-                for argset in state[state_ref]:
-                    if isinstance(argset, six.string_types):
-                        needs_default = False
-                        break
-                if needs_default:
-                    state[state_ref].insert(-1, '__call__')
-
     def call_high(self, high, orchestration_jid=None):
         '''
         Process a high data call and ensure the defined states.
         '''
-        self.inject_default_call(high)
         errors = []
         # If there is extension data reconcile it
         high, ext_errors = self.reconcile_extend(high)
@@ -3668,7 +3606,7 @@ class BaseHighState(object):
                 )
                 log.critical(msg)
                 errors.append(msg)
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 msg = 'Rendering SLS {0} failed, render error: {1}'.format(
                     sls, exc
                 )
@@ -3838,7 +3776,7 @@ class BaseHighState(object):
 
                     for arg in state[name][s_dec]:
                         if isinstance(arg, dict):
-                            if arg:
+                            if len(arg) > 0:
                                 if next(six.iterkeys(arg)) == 'order':
                                     found = True
                     if not found:
@@ -4100,7 +4038,7 @@ class BaseHighState(object):
             ret[tag_name]['comment'] = 'Unable to render top file: '
             ret[tag_name]['comment'] += six.text_type(err.error)
             return ret
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             trb = traceback.format_exc()
             err.append(trb)
             return err
@@ -4372,5 +4310,7 @@ class RemoteHighState(object):
         self._closing = True
         self.channel.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701

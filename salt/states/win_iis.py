@@ -11,9 +11,8 @@ from Microsoft IIS.
 
 # Import python libs
 from __future__ import absolute_import, unicode_literals, print_function
-
-# Import salt libs
 from salt.ext.six.moves import map
+
 
 # Define the module's virtual name
 __virtualname__ = 'win_iis'
@@ -37,7 +36,7 @@ def _get_binding_info(hostheader='', ipaddress='*', port=80):
     return ret
 
 
-def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80, protocol='http', preload=''):
+def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80, protocol='http'):
     '''
     Ensure the website has been deployed.
 
@@ -54,7 +53,6 @@ def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80
     :param str ipaddress: The IP address of the binding.
     :param str port: The TCP port of the binding.
     :param str protocol: The application protocol of the binding.
-    :param bool preload: Whether Preloading should be enabled
 
     .. note:
 
@@ -84,7 +82,6 @@ def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80
                 - ipaddress: '*'
                 - port: 443
                 - protocol: https
-                - preload: True
     '''
     ret = {'name': name,
            'changes': {},
@@ -106,7 +103,7 @@ def deployed(name, sourcepath, apppool='', hostheader='', ipaddress='*', port=80
                           'new': name}
         ret['result'] = __salt__['win_iis.create_site'](name, sourcepath, apppool,
                                                         hostheader, ipaddress, port,
-                                                        protocol, preload)
+                                                        protocol)
     return ret
 
 
@@ -782,7 +779,7 @@ def remove_vdir(name, site, app='/'):
 
 def set_app(name, site, settings=None):
     # pylint: disable=anomalous-backslash-in-string
-    '''
+    r'''
     .. versionadded:: 2017.7.0
 
     Set the value of the setting for an IIS web application.
@@ -871,14 +868,13 @@ def set_app(name, site, settings=None):
     return ret
 
 
-def webconfiguration_settings(name, location='', settings=None):
+def webconfiguration_settings(name, settings=None):
     r'''
     Set the value of webconfiguration settings.
 
     :param str name: The name of the IIS PSPath containing the settings.
         Possible PSPaths are :
         MACHINE, MACHINE/WEBROOT, IIS:\, IIS:\Sites\sitename, ...
-    :param str location: The location of the settings.
     :param dict settings: Dictionaries of dictionaries.
         You can match a specific item in a collection with this syntax inside a key:
         'Collection[{name: site0}].logFile.directory'
@@ -926,18 +922,6 @@ def webconfiguration_settings(name, location='', settings=None):
                 system.applicationHost/sites:
                   'Collection[{name: site0}].logFile.directory': 'C:\logs\iis\site0'
 
-    Example of usage with a location:
-
-    .. code-block:: yaml
-
-        site0-IIS-location-level-security:
-          win_iis.webconfiguration_settings:
-            - name: 'IIS:/'
-            - location: 'site0'
-            - settings:
-              system.webServer/security/authentication/basicAuthentication:
-                enabled: True
-
     '''
 
     ret = {'name': name,
@@ -961,13 +945,15 @@ def webconfiguration_settings(name, location='', settings=None):
         for setting_name, value in filter_settings.items():
             settings_list.append({'filter': filter, 'name': setting_name, 'value': value})
 
-    current_settings_list = __salt__['win_iis.get_webconfiguration_settings'](name=name,
-                                                                                  settings=settings_list, location=location)
+    current_settings_list = __salt__['win_iis.get_webconfiguration_settings'](name=name, settings=settings_list)
     for idx, setting in enumerate(settings_list):
 
         is_collection = setting['name'].split('.')[-1] == 'Collection'
-
-        if ((is_collection and list(map(dict, setting['value'])) != list(map(dict, current_settings_list[idx]['value'])))
+        # If this is a new setting and not an update to an existing setting
+        if len(current_settings_list) <= idx:
+            ret_settings['changes'][setting['filter'] + '.' + setting['name']] = {'old': {},
+                                                                                   'new': settings_list[idx]['value']}
+        elif ((is_collection and list(map(dict, setting['value'])) != list(map(dict, current_settings_list[idx]['value'])))
                 or (not is_collection and str(setting['value']) != str(current_settings_list[idx]['value']))):
             ret_settings['changes'][setting['filter'] + '.' + setting['name']] = {'old': current_settings_list[idx]['value'],
                                                                                   'new': settings_list[idx]['value']}
@@ -980,19 +966,17 @@ def webconfiguration_settings(name, location='', settings=None):
         ret['changes'] = ret_settings
         return ret
 
-    __salt__['win_iis.set_webconfiguration_settings'](name=name, settings=settings_list, location=location)
+    success = __salt__['win_iis.set_webconfiguration_settings'](name=name, settings=settings_list)
 
-    new_settings_list = __salt__['win_iis.get_webconfiguration_settings'](name=name,
-                                                                              settings=settings_list, location=location)
+    new_settings_list = __salt__['win_iis.get_webconfiguration_settings'](name=name, settings=settings_list)
     for idx, setting in enumerate(settings_list):
 
         is_collection = setting['name'].split('.')[-1] == 'Collection'
-
         if ((is_collection and setting['value'] != new_settings_list[idx]['value'])
                 or (not is_collection and str(setting['value']) != str(new_settings_list[idx]['value']))):
             ret_settings['failures'][setting['filter'] + '.' + setting['name']] = {'old': current_settings_list[idx]['value'],
                                                                                    'new': new_settings_list[idx]['value']}
-            ret_settings['changes'].pop(setting['filter'] + '.' + setting['name'], None)
+            ret_settings['changes'].get(setting['filter'] + '.' + setting['name'], None)
 
     if ret_settings['failures']:
         ret['comment'] = 'Some settings failed to change.'
@@ -1001,6 +985,6 @@ def webconfiguration_settings(name, location='', settings=None):
     else:
         ret['comment'] = 'Set settings to contain the provided values.'
         ret['changes'] = ret_settings['changes']
-        ret['result'] = True
+        ret['result'] = success
 
     return ret

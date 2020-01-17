@@ -2,9 +2,9 @@
 '''
 Azure (ARM) DNS State Module
 
-.. versionadded:: Fluorine
+.. versionadded:: 3000
 
-:maintainer: <devops@decisionlab.io>
+:maintainer: <devops@eitr.tech>
 :maturity: new
 :depends:
     * `azure <https://pypi.python.org/pypi/azure>`_ >= 2.0.0
@@ -18,39 +18,32 @@ Azure (ARM) DNS State Module
     * `azure-mgmt-web <https://pypi.python.org/pypi/azure-mgmt-web>`_ >= 0.32.0
     * `azure-storage <https://pypi.python.org/pypi/azure-storage>`_ >= 0.34.3
     * `msrestazure <https://pypi.python.org/pypi/msrestazure>`_ >= 0.4.21
-
 :platform: linux
 
-:configuration:
-    This module requires Azure Resource Manager credentials to be passed as a dictionary of
-    keyword arguments to the ``connection_auth`` parameter in order to work properly. Since the authentication
-    parameters are sensitive, it's recommended to pass them to the states via pillar.
+:configuration: This module requires Azure Resource Manager credentials to be passed as a dictionary of
+keyword arguments to the ``connection_auth`` parameter in order to work properly. Since the authentication
+parameters are sensitive, it's recommended to pass them to the states via pillar.
 
-Required provider parameters:
+    Required provider parameters:
 
     if using username and password:
-
-        * ``subscription_id``
-        * ``username``
-        * ``password``
+      * ``subscription_id``
+      * ``username``
+      * ``password``
 
     if using a service principal:
+      * ``subscription_id``
+      * ``tenant``
+      * ``client_id``
+      * ``secret``
 
-        * ``subscription_id``
-        * ``tenant``
-        * ``client_id``
-        * ``secret``
-
-Optional provider parameters:
+    Optional provider parameters:
 
     **cloud_environment**: Used to point the cloud driver to different API endpoints, such as Azure GovCloud. Possible values:
-
-    Possible values:
-
-        * ``AZURE_PUBLIC_CLOUD`` (default)
-        * ``AZURE_CHINA_CLOUD``
-        * ``AZURE_US_GOV_CLOUD``
-        * ``AZURE_GERMAN_CLOUD``
+      * ``AZURE_PUBLIC_CLOUD`` (default)
+      * ``AZURE_CHINA_CLOUD``
+      * ``AZURE_US_GOV_CLOUD``
+      * ``AZURE_GERMAN_CLOUD``
 
     Example Pillar for Azure Resource Manager authentication:
 
@@ -70,7 +63,7 @@ Optional provider parameters:
 
     Example states using Azure Resource Manager authentication:
 
-    .. code-block:: none
+    .. code-block:: yaml
 
         {% set profile = salt['pillar.get']('azurearm:mysubscription') %}
         Ensure DNS zone exists:
@@ -139,7 +132,7 @@ def zone_present(name, resource_group, etag=None, if_match=None, if_none_match=N
                  registration_virtual_networks=None, resolution_virtual_networks=None,
                  tags=None, zone_type='Public', connection_auth=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Ensure a DNS zone exists.
 
@@ -306,7 +299,7 @@ def zone_present(name, resource_group, etag=None, if_match=None, if_none_match=N
 
 def zone_absent(name, resource_group, connection_auth=None):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Ensure a DNS zone does not exist in the resource group.
 
@@ -372,7 +365,7 @@ def record_set_present(name, zone_name, resource_group, record_type, if_match=No
                        ns_records=None, ptr_records=None, srv_records=None, txt_records=None, cname_record=None,
                        soa_record=None, caa_records=None, connection_auth=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Ensure a record set exists in a DNS zone.
 
@@ -399,7 +392,7 @@ def record_set_present(name, zone_name, resource_group, record_type, if_match=No
         will be ignored.
 
     :param etag:
-        The etag of the record set. `Etags <https://docs.microsoft.com/en-us/azure/dns/dns-zones-records#etags>`__ are
+        The etag of the record set. `Etags <https://docs.microsoft.com/en-us/azure/dns/dns-zones-records#etags>`_ are
         used to handle concurrent changes to the same resource safely.
 
     :param metadata:
@@ -410,52 +403,52 @@ def record_set_present(name, zone_name, resource_group, record_type, if_match=No
 
     :param arecords:
         The list of A records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.arecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.arecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param aaaa_records:
         The list of AAAA records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.aaaarecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.aaaarecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param mx_records:
         The list of MX records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.mxrecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.mxrecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param ns_records:
         The list of NS records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.nsrecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.nsrecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param ptr_records:
         The list of PTR records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.ptrrecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.ptrrecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param srv_records:
         The list of SRV records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.srvrecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.srvrecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param txt_records:
         The list of TXT records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.txtrecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.txtrecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param cname_record:
         The CNAME record in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.cnamerecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.cnamerecord?view=azure-python>`_
         to create a dictionary representing the record object.
 
     :param soa_record:
         The SOA record in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.soarecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.soarecord?view=azure-python>`_
         to create a dictionary representing the record object.
 
     :param caa_records:
         The list of CAA records in the record set. View the
-        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.caarecord?view=azure-python>`__
+        `Azure SDK documentation <https://docs.microsoft.com/en-us/python/api/azure.mgmt.dns.models.caarecord?view=azure-python>`_
         to create a list of dictionaries representing the record objects.
 
     :param connection_auth:
@@ -625,7 +618,7 @@ def record_set_present(name, zone_name, resource_group, record_type, if_match=No
 
 def record_set_absent(name, zone_name, resource_group, connection_auth=None):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Ensure a record set does not exist in the DNS zone.
 

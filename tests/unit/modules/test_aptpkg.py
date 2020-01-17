@@ -14,7 +14,7 @@ import textwrap
 # Import Salt Testing Libs
 from tests.support.mixins import LoaderModuleMockMixin
 from tests.support.unit import TestCase, skipIf
-from tests.support.mock import Mock, MagicMock, patch, NO_MOCK, NO_MOCK_REASON
+from tests.support.mock import Mock, MagicMock, patch
 
 # Import Salt Libs
 from salt.ext import six
@@ -91,7 +91,7 @@ LOWPKG_INFO = {
         'section': 'web',
         'source': 'wget',
         'version': '1.15-1ubuntu1.14.04.2',
-        'status': 'ii'
+        'status': 'ii',
     },
     'apache2': {
         'architecture': 'amd64',
@@ -109,7 +109,7 @@ LOWPKG_INFO = {
         'section': 'httpd',
         'source': 'apache2',
         'version': '2.4.18-2ubuntu3.9',
-        'status': 'rc'
+        'status': 'rc',
     }
 }
 
@@ -158,7 +158,6 @@ UNINSTALL = {
 }
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
     '''
     Test cases for salt.modules.aptpkg
@@ -167,39 +166,51 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
     def setup_loader_modules(self):
         return {aptpkg: {}}
 
-    @patch('salt.modules.aptpkg.__salt__',
-           {'pkg_resource.version': MagicMock(return_value=LOWPKG_INFO['wget']['version'])})
     def test_version(self):
         '''
         Test - Returns a string representing the package version or an empty string if
         not installed.
         '''
-        assert aptpkg.version(*['wget']) == aptpkg.__salt__['pkg_resource.version']()
+        version = LOWPKG_INFO['wget']['version']
+        mock = MagicMock(return_value=version)
+        with patch.dict(aptpkg.__salt__, {'pkg_resource.version': mock}):
+            self.assertEqual(aptpkg.version(*['wget']), version)
 
-    @patch('salt.modules.aptpkg.latest_version', MagicMock(return_value=''))
     def test_upgrade_available(self):
         '''
         Test - Check whether or not an upgrade is available for a given package.
         '''
-        assert not aptpkg.upgrade_available('wget')
+        with patch('salt.modules.aptpkg.latest_version',
+                   MagicMock(return_value='')):
+            self.assertFalse(aptpkg.upgrade_available('wget'))
 
-    @patch('salt.modules.aptpkg.get_repo_keys', MagicMock(return_value=REPO_KEYS))
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_all': MagicMock(return_value={'retcode': 0, 'stdout': 'OK'})})
     def test_add_repo_key(self):
         '''
         Test - Add a repo key.
         '''
-        assert aptpkg.add_repo_key(keyserver='keyserver.ubuntu.com', keyid='FBB75451')
+        with patch('salt.modules.aptpkg.get_repo_keys',
+                   MagicMock(return_value=REPO_KEYS)):
+            mock = MagicMock(return_value={
+                'retcode': 0,
+                'stdout': 'OK'
+            })
+            with patch.dict(aptpkg.__salt__, {'cmd.run_all': mock}):
+                self.assertTrue(aptpkg.add_repo_key(keyserver='keyserver.ubuntu.com',
+                                                    keyid='FBB75451'))
 
-    @patch('salt.modules.aptpkg.get_repo_keys', MagicMock(return_value=REPO_KEYS))
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_all': MagicMock(return_value={'retcode': 0, 'stdout': 'OK'})})
     def test_add_repo_key_failed(self):
         '''
         Test - Add a repo key using incomplete input data.
         '''
-        with pytest.raises(SaltInvocationError) as ex:
-            aptpkg.add_repo_key(keyserver='keyserver.ubuntu.com')
-        assert ' No keyid or keyid too short for keyserver: keyserver.ubuntu.com' in str(ex)
+        with patch('salt.modules.aptpkg.get_repo_keys',
+                   MagicMock(return_value=REPO_KEYS)):
+            kwargs = {'keyserver': 'keyserver.ubuntu.com'}
+            mock = MagicMock(return_value={
+                'retcode': 0,
+                'stdout': 'OK'
+            })
+            with patch.dict(aptpkg.__salt__, {'cmd.run_all': mock}):
+                self.assertRaises(SaltInvocationError, aptpkg.add_repo_key, **kwargs)
 
     def test_get_repo_keys(self):
         '''
@@ -212,31 +223,35 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
         with patch.dict(aptpkg.__salt__, {'cmd.run_all': mock}):
             self.assertEqual(aptpkg.get_repo_keys(), REPO_KEYS)
 
-    @patch('salt.modules.aptpkg.__salt__', {'lowpkg.file_dict': MagicMock(return_value=LOWPKG_FILES)})
     def test_file_dict(self):
         '''
         Test - List the files that belong to a package, grouped by package.
         '''
-        assert aptpkg.file_dict('wget') == LOWPKG_FILES
+        mock = MagicMock(return_value=LOWPKG_FILES)
+        with patch.dict(aptpkg.__salt__, {'lowpkg.file_dict': mock}):
+            self.assertEqual(aptpkg.file_dict('wget'), LOWPKG_FILES)
 
-    @patch('salt.modules.aptpkg.__salt__', {
-        'lowpkg.file_list': MagicMock(return_value={'errors': LOWPKG_FILES['errors'],
-                                                    'files': LOWPKG_FILES['packages']['wget']})})
     def test_file_list(self):
         '''
-        Test 'file_list' function, which is just an alias to the lowpkg 'file_list'
-
+        Test - List the files that belong to a package.
         '''
-        assert aptpkg.file_list('wget') == aptpkg.__salt__['lowpkg.file_list']()
+        files = {
+            'errors': LOWPKG_FILES['errors'],
+            'files': LOWPKG_FILES['packages']['wget'],
+        }
+        mock = MagicMock(return_value=files)
+        with patch.dict(aptpkg.__salt__, {'lowpkg.file_list': mock}):
+            self.assertEqual(aptpkg.file_list('wget'), files)
 
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_stdout': MagicMock(return_value='wget\t\t\t\t\t\tinstall')})
     def test_get_selections(self):
         '''
         Test - View package state from the dpkg database.
         '''
-        assert aptpkg.get_selections('wget') == {'install': ['wget']}
+        selections = {'install': ['wget']}
+        mock = MagicMock(return_value='wget\t\t\t\t\t\tinstall')
+        with patch.dict(aptpkg.__salt__, {'cmd.run_stdout': mock}):
+            self.assertEqual(aptpkg.get_selections('wget'), selections)
 
-    @patch('salt.modules.aptpkg.__salt__', {'lowpkg.info': MagicMock(return_value=LOWPKG_INFO)})
     def test_info_installed(self):
         '''
         Test - Return the information of the named package(s) installed on the system.
@@ -251,74 +266,22 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
         for name in names:
             if installed['wget'].get(names[name], False):
                 installed['wget'][name] = installed['wget'].pop(names[name])
-        del installed['wget']['status']
-        assert aptpkg.info_installed('wget') == installed
-        assert len(aptpkg.info_installed()) == 1
 
-    @patch('salt.modules.aptpkg.__salt__', {'lowpkg.info': MagicMock(return_value=LOWPKG_INFO)})
-    def test_info_installed_attr(self):
-        '''
-        Test info_installed 'attr'.
-        This doesn't test 'attr' behaviour per se, since the underlying function is in dpkg.
-        The test should simply not raise exceptions for invalid parameter.
+        mock = MagicMock(return_value=LOWPKG_INFO)
+        with patch.dict(aptpkg.__salt__, {'lowpkg.info': mock}):
+            del installed['wget']['status']
+            self.assertEqual(aptpkg.info_installed('wget'), installed)
+            self.assertEqual(len(aptpkg.info_installed()), 1)
 
-        :return:
-        '''
-        ret = aptpkg.info_installed('emacs', attr='foo,bar')
-        assert isinstance(ret, dict)
-        assert 'wget' in ret
-        assert isinstance(ret['wget'], dict)
-
-        wget_pkg = ret['wget']
-        expected_pkg = {'url': 'http://www.gnu.org/software/wget/',
-                        'packager': 'Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>', 'name': 'wget',
-                        'install_date': '2016-08-30T22:20:15Z', 'description': 'retrieves files from the web',
-                        'version': '1.15-1ubuntu1.14.04.2', 'architecture': 'amd64', 'group': 'web', 'source': 'wget'}
-        for k in wget_pkg:
-            assert k in expected_pkg
-            assert wget_pkg[k] == expected_pkg[k]
-
-    @patch('salt.modules.aptpkg.__salt__', {'lowpkg.info': MagicMock(return_value=LOWPKG_INFO)})
-    def test_info_installed_all_versions(self):
-        '''
-        Test info_installed 'all_versions'.
-        Since Debian won't return same name packages with the different names,
-        this should just return different structure, backward compatible with
-        the RPM equivalents.
-
-        :return:
-        '''
-        print()
-        ret = aptpkg.info_installed('emacs', all_versions=True)
-        assert isinstance(ret, dict)
-        assert 'wget' in ret
-        assert isinstance(ret['wget'], list)
-
-        pkgs = ret['wget']
-
-        assert len(pkgs) == 1
-        assert isinstance(pkgs[0], dict)
-
-        wget_pkg = pkgs[0]
-        expected_pkg = {'url': 'http://www.gnu.org/software/wget/',
-                        'packager': 'Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>', 'name': 'wget',
-                        'install_date': '2016-08-30T22:20:15Z', 'description': 'retrieves files from the web',
-                        'version': '1.15-1ubuntu1.14.04.2', 'architecture': 'amd64', 'group': 'web', 'source': 'wget'}
-        for k in wget_pkg:
-            assert k in expected_pkg
-            assert wget_pkg[k] == expected_pkg[k]
-
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_stdout': MagicMock(return_value='wget: /usr/bin/wget')})
     def test_owner(self):
         '''
         Test - Return the name of the package that owns the file.
         '''
-        assert aptpkg.owner('/usr/bin/wget') == 'wget'
+        paths = ['/usr/bin/wget']
+        mock = MagicMock(return_value='wget: /usr/bin/wget')
+        with patch.dict(aptpkg.__salt__, {'cmd.run_stdout': mock}):
+            self.assertEqual(aptpkg.owner(*paths), 'wget')
 
-    @patch('salt.utils.pkg.clear_rtag', MagicMock())
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_all': MagicMock(return_value={'retcode': 0,
-                                                                                   'stdout': APT_Q_UPDATE}),
-                                            'config.get': MagicMock(return_value=False)})
     def test_refresh_db(self):
         '''
         Test - Updates the APT database to latest packages based upon repositories.
@@ -330,20 +293,26 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
             'http://security.ubuntu.com trusty-security/main amd64 Packages': True,
             'http://security.ubuntu.com trusty-security/main i386 Packages': True
         }
-        assert aptpkg.refresh_db() == refresh_db
+        mock = MagicMock(return_value={
+            'retcode': 0,
+            'stdout': APT_Q_UPDATE
+        })
+        with patch('salt.utils.pkg.clear_rtag', MagicMock()):
+            with patch.dict(aptpkg.__salt__, {'cmd.run_all': mock, 'config.get': MagicMock(return_value=False)}):
+                self.assertEqual(aptpkg.refresh_db(), refresh_db)
 
-    @patch('salt.utils.pkg.clear_rtag', MagicMock())
-    @patch('salt.modules.aptpkg.__salt__', {'cmd.run_all': MagicMock(return_value={'retcode': 0,
-                                                                                   'stdout': APT_Q_UPDATE_ERROR}),
-                                            'config.get': MagicMock(return_value=False)})
     def test_refresh_db_failed(self):
         '''
         Test - Update the APT database using unreachable repositories.
         '''
-        with pytest.raises(CommandExecutionError) as err:
-            aptpkg.refresh_db(failhard=True)
-        assert 'Error getting repos' in str(err)
-        assert 'http://security.ubuntu.com trusty InRelease, http://security.ubuntu.com trusty Release.gpg' in str(err)
+        kwargs = {'failhard': True}
+        mock = MagicMock(return_value={
+            'retcode': 0,
+            'stdout': APT_Q_UPDATE_ERROR
+        })
+        with patch('salt.utils.pkg.clear_rtag', MagicMock()):
+            with patch.dict(aptpkg.__salt__, {'cmd.run_all': mock, 'config.get': MagicMock(return_value=False)}):
+                self.assertRaises(CommandExecutionError, aptpkg.refresh_db, **kwargs)
 
     def test_autoremove(self):
         '''
@@ -363,31 +332,75 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
                 assert aptpkg.autoremove(list_only=True) == []
                 assert aptpkg.autoremove(list_only=True, purge=True) == []
 
-    @patch('salt.modules.aptpkg._uninstall', MagicMock(return_value=UNINSTALL))
     def test_remove(self):
         '''
         Test - Remove packages.
         '''
-        assert aptpkg.remove(name='tmux') == UNINSTALL
+        with patch('salt.modules.aptpkg._uninstall',
+                   MagicMock(return_value=UNINSTALL)):
+            self.assertEqual(aptpkg.remove(name='tmux'), UNINSTALL)
 
-    @patch('salt.modules.aptpkg._uninstall', MagicMock(return_value=UNINSTALL))
     def test_purge(self):
         '''
         Test - Remove packages along with all configuration files.
         '''
-        assert aptpkg.purge(name='tmux') == UNINSTALL
+        with patch('salt.modules.aptpkg._uninstall',
+                   MagicMock(return_value=UNINSTALL)):
+            self.assertEqual(aptpkg.purge(name='tmux'), UNINSTALL)
 
-    @patch('salt.utils.pkg.clear_rtag', MagicMock())
-    @patch('salt.modules.aptpkg.list_pkgs', MagicMock(return_value=UNINSTALL))
-    @patch.multiple(aptpkg, **{'__salt__': {'config.get': MagicMock(return_value=True),
-                                            'cmd.run_all': MagicMock(return_value={'retcode': 0, 'stdout': UPGRADE})}})
     def test_upgrade(self):
         '''
         Test - Upgrades all packages.
         '''
-        assert aptpkg.upgrade() == {}
+        with patch('salt.utils.pkg.clear_rtag', MagicMock()):
+            with patch('salt.modules.aptpkg.list_pkgs',
+                       MagicMock(return_value=UNINSTALL)):
+                mock_cmd = MagicMock(return_value={
+                    'retcode': 0,
+                    'stdout': UPGRADE
+                })
+                patch_kwargs = {
+                    '__salt__': {
+                        'config.get': MagicMock(return_value=True),
+                        'cmd.run_all': mock_cmd
+                    }
+                }
+                with patch.multiple(aptpkg, **patch_kwargs):
+                    self.assertEqual(aptpkg.upgrade(), dict())
 
-    # TODO: has to be broken up
+    def test_upgrade_downloadonly(self):
+        '''
+        Tests the download-only options for upgrade.
+        '''
+        with patch('salt.utils.pkg.clear_rtag', MagicMock()):
+            with patch('salt.modules.aptpkg.list_pkgs',
+                       MagicMock(return_value=UNINSTALL)):
+                mock_cmd = MagicMock(return_value={
+                    'retcode': 0,
+                    'stdout': UPGRADE
+                })
+                patch_kwargs = {
+                    '__salt__': {
+                        'config.get': MagicMock(return_value=True),
+                        'cmd.run_all': mock_cmd
+                    },
+                }
+                with patch.multiple(aptpkg, **patch_kwargs):
+                    aptpkg.upgrade()
+                    args_matching = [True for args in patch_kwargs['__salt__']['cmd.run_all'].call_args[0] if "--download-only" in args]
+                    # Here we shouldn't see the parameter and args_matching should be empty.
+                    self.assertFalse(any(args_matching))
+
+                    aptpkg.upgrade(downloadonly=True)
+                    args_matching = [True for args in patch_kwargs['__salt__']['cmd.run_all'].call_args[0] if "--download-only" in args]
+                    # --download-only should be in the args list and we should have at least on True in the list.
+                    self.assertTrue(any(args_matching))
+
+                    aptpkg.upgrade(download_only=True)
+                    args_matching = [True for args in patch_kwargs['__salt__']['cmd.run_all'].call_args[0] if "--download-only" in args]
+                    # --download-only should be in the args list and we should have at least on True in the list.
+                    self.assertTrue(any(args_matching))
+
     def test_show(self):
         '''
         Test that the pkg.show function properly parses apt-cache show output.
@@ -509,6 +522,56 @@ class AptPkgTestCase(TestCase, LoaderModuleMockMixin):
             self.assertEqual(aptpkg.show('foo*', refresh=True), {})
             self.assert_called_once(refresh_mock)
             refresh_mock.reset_mock()
+
+    def test_mod_repo_enabled(self):
+        '''
+        Checks if a repo is enabled or disabled depending on the passed kwargs.
+        '''
+        with patch.dict(aptpkg.__salt__, {'config.option': MagicMock(), 'no_proxy': MagicMock(return_value=False)}):
+            with patch('salt.modules.aptpkg._check_apt', MagicMock(return_value=True)):
+                with patch('salt.modules.aptpkg.refresh_db', MagicMock(return_value={})):
+                    with patch('salt.utils.data.is_true', MagicMock(return_value=True)) as data_is_true:
+                        with patch('salt.modules.aptpkg.sourceslist', MagicMock(), create=True):
+                            repo = aptpkg.mod_repo('foo', enabled=False)
+                            data_is_true.assert_called_with(False)
+                            # with disabled=True; should call salt.utils.data.is_true True
+                            data_is_true.reset_mock()
+                            repo = aptpkg.mod_repo('foo', disabled=True)
+                            data_is_true.assert_called_with(True)
+                            # with enabled=True; should call salt.utils.data.is_true with False
+                            data_is_true.reset_mock()
+                            repo = aptpkg.mod_repo('foo', enabled=True)
+                            data_is_true.assert_called_with(True)
+                            # with disabled=True; should call salt.utils.data.is_true False
+                            data_is_true.reset_mock()
+                            repo = aptpkg.mod_repo('foo', disabled=False)
+                            data_is_true.assert_called_with(False)
+
+    @patch('salt.utils.path.os_walk', MagicMock(return_value=[('test', 'test', 'test')]))
+    @patch('os.path.getsize', MagicMock(return_value=123456))
+    @patch('os.path.getctime', MagicMock(return_value=1234567890.123456))
+    @patch('fnmatch.filter', MagicMock(return_value=['/var/cache/apt/archive/test_package.rpm']))
+    def test_list_downloaded(self):
+        '''
+        Test downloaded packages listing.
+        :return:
+        '''
+        DOWNLOADED_RET = {
+            'test-package': {
+                '1.0': {
+                    'path': '/var/cache/apt/archive/test_package.rpm',
+                    'size': 123456,
+                    'creation_date_time_t': 1234567890,
+                    'creation_date_time': '2009-02-13T23:31:30',
+                }
+            }
+        }
+
+        with patch.dict(aptpkg.__salt__, {'lowpkg.bin_pkg_info': MagicMock(return_value={'name': 'test-package',
+                                                                                         'version': '1.0'})}):
+            list_downloaded = aptpkg.list_downloaded()
+            self.assertEqual(len(list_downloaded), 1)
+            self.assertDictEqual(list_downloaded, DOWNLOADED_RET)
 
 
 @skipIf(pytest is None, 'PyTest is missing')

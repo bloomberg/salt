@@ -495,6 +495,16 @@ def opts_pkg():
     return ret
 
 
+def rand_str(size=9999999999, hash_type=None):
+    '''
+    This function has been renamed to
+    random_hash. This function will stay to
+    ensure backwards compatibility, but please
+    switch to using the prefered name random_hash.
+    '''
+    return random_hash(size=size, hash_type=hash_type)
+
+
 def random_hash(size=9999999999, hash_type=None):
     '''
     .. versionadded:: 2015.5.2
@@ -578,7 +588,7 @@ def try_(module, return_try_exception=False, **kwargs):
     '''
     try:
         return __salt__[module](**kwargs)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         if return_try_exception:
             return e
     return None

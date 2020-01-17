@@ -24,7 +24,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import re
 import types
 import logging
-
+import sys
 try:
     import pkg_resources
     HAS_PKG_RESOURCES = True
@@ -34,11 +34,63 @@ except ImportError:
 # Import salt libs
 import salt.utils.data
 import salt.utils.versions
+from salt.version import SaltStackVersion as _SaltStackVersion
 from salt.exceptions import CommandExecutionError, CommandNotFoundError
 
 # Import 3rd-party libs
 import salt.ext.six as six
 # pylint: disable=import-error
+
+
+def purge_pip():
+    '''
+    Purge pip and it's sub-modules
+    '''
+    # Remove references to the loaded pip module above so reloading works
+    if 'pip' not in sys.modules:
+        return
+    pip_related_entries = [
+        (k, v) for (k, v) in sys.modules.items()
+        or getattr(v, '__module__', '').startswith('pip.')
+        or (isinstance(v, types.ModuleType) and v.__name__.startswith('pip.'))
+    ]
+    for name, entry in pip_related_entries:
+        sys.modules.pop(name)
+        del entry
+
+    if 'pip' in globals():
+        del globals()['pip']
+    if 'pip' in locals():
+        del locals()['pip']
+    sys_modules_pip = sys.modules.pop('pip', None)
+    if sys_modules_pip is not None:
+        del sys_modules_pip
+
+
+def pip_has_internal_exceptions_mod(ver):
+    '''
+    True when the pip version has the `pip._internal.exceptions` module
+    '''
+    return salt.utils.versions.compare(
+        ver1=ver,
+        oper='>=',
+        ver2='10.0',
+    )
+
+
+def pip_has_exceptions_mod(ver):
+    '''
+    True when the pip version has the `pip.exceptions` module
+    '''
+    if pip_has_internal_exceptions_mod(ver):
+        return False
+    return salt.utils.versions.compare(
+        ver1=ver,
+        oper='>=',
+        ver2='1.0'
+    )
+
+
 try:
     import pip
     HAS_PIP = True
@@ -61,6 +113,12 @@ except ImportError:
         del sys_modules_pip
 
 if HAS_PIP is True:
+    if not hasattr(purge_pip, '__pip_ver__'):
+        purge_pip.__pip_ver__ = pip.__version__
+    elif purge_pip.__pip_ver__ != pip.__version__:
+        purge_pip()
+        import pip
+        purge_pip.__pip_ver__ = pip.__version__
     if salt.utils.versions.compare(ver1=pip.__version__,
                                    oper='>=',
                                    ver2='18.1'):
@@ -190,7 +248,7 @@ def _check_pkg_version_format(pkg):
         try:
             ret['prefix'] = install_req.req.project_name
             ret['version_spec'] = install_req.req.specs
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             ret['prefix'] = re.sub('[^A-Za-z0-9.]+', '-', install_req.name)
             if hasattr(install_req, "specifier"):
                 specifier = install_req.specifier
@@ -314,7 +372,7 @@ def _pep440_version_cmp(pkg1, pkg2, ignore_epoch=False):
             return 0
         if pkg_resources.parse_version(pkg1) > pkg_resources.parse_version(pkg2):
             return 1
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-except
         log.exception(exc)
     return None
 
@@ -365,9 +423,8 @@ def installed(name,
               cache_dir=None,
               no_binary=None,
               extra_args=None,
-              user_install=False,
               **kwargs):
-    r'''
+    '''
     Make sure the package is installed
 
     name
@@ -405,10 +462,6 @@ def installed(name,
         Force to not use binary packages (requires pip >= 7.0.0)
         Accepts either :all: to disable all binary packages, :none: to empty the set,
         or a list of one or more packages
-
-    user_install
-        Enable install to occur inside the user base's (site.USER_BASE) binary directory,
-        typically ~/.local/, or %APPDATA%\Python on Windows
 
     Example:
 
@@ -718,6 +771,20 @@ def installed(name,
                               'was {1}.').format(min_version, cur_version)
             return ret
 
+    # Deprecation warning for the repo option
+    if repo is not None:
+        msg = ('The \'repo\' argument to pip.installed is deprecated and will '
+               'be removed in Salt {version}. Please use \'name\' instead. '
+               'The current value for name, \'{0}\' will be replaced by the '
+               'value of repo, \'{1}\''.format(
+                   name,
+                   repo,
+                   version=_SaltStackVersion.from_name('Lithium').formatted_version
+               ))
+        salt.utils.versions.warn_until('Lithium', msg)
+        ret.setdefault('warnings', []).append(msg)
+        name = repo
+
     # Get the packages parsed name and version from the pip library.
     # This only is done when there is no requirements or editable parameter.
     pkgs_details = []
@@ -765,15 +832,13 @@ def installed(name,
         try:
             pip_list = __salt__['pip.list'](bin_env=bin_env, user=user, cwd=cwd)
         # If we fail, then just send False, and we'll try again in the next function call
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.exception(exc)
             pip_list = False
 
         for prefix, state_pkg_name, version_spec in pkgs_details:
 
             if prefix:
-                state_pkg_name = state_pkg_name
-                version_spec = version_spec
                 out = _check_if_installed(prefix, state_pkg_name, version_spec,
                                           ignore_installed, force_reinstall,
                                           upgrade, user, cwd, bin_env, env_vars,
@@ -870,8 +935,8 @@ def installed(name,
         use_vt=use_vt,
         trusted_host=trusted_host,
         no_cache_dir=no_cache_dir,
-        user_install=user_install,
         extra_args=extra_args,
+        disable_version_check=True,
         **kwargs
     )
 
@@ -1074,7 +1139,7 @@ def uptodate(name,
 
     try:
         packages = __salt__['pip.list_upgrades'](bin_env=bin_env, user=user, cwd=cwd)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         ret['comment'] = six.text_type(e)
         return ret
 
@@ -1099,51 +1164,3 @@ def uptodate(name,
         ret['comment'] = 'Upgrade failed.'
 
     return ret
-
-
-def mod_aggregate(low, chunks, running):
-    '''
-    The mod_aggregate function which looks up all packages in the available
-    low chunks and merges them into a single pkgs ref in the present low data
-    '''
-    pkgs = []
-    pkg_type = None
-    agg_enabled = [
-        'installed',
-        'removed',
-    ]
-    if low.get('fun') not in agg_enabled:
-        return low
-    for chunk in chunks:
-        tag = __utils__['state.gen_tag'](chunk)
-        if tag in running:
-            # Already ran the pkg state, skip aggregation
-            continue
-        if chunk.get('state') == 'pip':
-            if '__agg__' in chunk:
-                continue
-            # Check for the same function
-            if chunk.get('fun') != low.get('fun'):
-                continue
-            # Check first if 'sources' was passed so we don't aggregate pkgs
-            # and sources together.
-            if pkg_type is None:
-                pkg_type = 'pkgs'
-            if pkg_type == 'pkgs':
-                # Pull out the pkg names!
-                if 'pkgs' in chunk:
-                    pkgs.extend(chunk['pkgs'])
-                    chunk['__agg__'] = True
-                elif 'name' in chunk:
-                    version = chunk.pop('version', None)
-                    if version is not None:
-                        pkgs.append({chunk['name']: version})
-                    else:
-                        pkgs.append(chunk['name'])
-                    chunk['__agg__'] = True
-    if pkg_type is not None and pkgs:
-        if pkg_type in low:
-            low[pkg_type].extend(pkgs)
-        else:
-            low[pkg_type] = pkgs
-    return low

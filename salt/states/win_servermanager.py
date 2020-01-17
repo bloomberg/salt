@@ -12,7 +12,6 @@ from __future__ import absolute_import, unicode_literals, print_function
 
 # Import salt modules
 import salt.utils.data
-import salt.utils.versions
 
 
 def __virtual__():
@@ -27,7 +26,8 @@ def installed(name,
               recurse=False,
               restart=False,
               source=None,
-              exclude=None):
+              exclude=None,
+              **kwargs):
     '''
     Install the windows feature. To install a single feature, use the ``name``
     parameter. To install multiple features, use the ``features`` parameter.
@@ -57,7 +57,10 @@ def installed(name,
         recurse (Optional[bool]):
             Install all sub-features as well. If the feature is installed but
             one of its sub-features are not installed set this will install
-            additional sub-features
+            additional sub-features. This argument was previously renamed from
+            ``force``. To ensure backwards compatibility ``force`` will
+            continue to work but please update your states to use the preferred
+            ``recurse`` arg.
 
         source (Optional[str]):
             Path to the source files if missing from the target system. None
@@ -112,6 +115,9 @@ def installed(name,
             - exclude:
               - Web-Server
     '''
+    if 'force' in kwargs:
+        kwargs.pop('force')
+
     ret = {'name': name,
            'result': True,
            'changes': {},

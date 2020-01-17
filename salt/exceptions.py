@@ -207,7 +207,7 @@ class FileLockError(SaltException):
     '''
     Used when an error occurs obtaining a file lock
     '''
-    def __init__(self, message, time_start=None, *args, **kwargs):
+    def __init__(self, message, time_start=None, *args, **kwargs):  # pylint: disable=keyword-arg-before-vararg
         super(FileLockError, self).__init__(message, *args, **kwargs)
         if time_start is None:
             log.warning(
@@ -309,7 +309,7 @@ class SaltClientTimeout(SaltException):
 
     Takes the ``jid`` as a parameter
     '''
-    def __init__(self, message, jid=None, *args, **kwargs):
+    def __init__(self, message, jid=None, *args, **kwargs):  # pylint: disable=keyword-arg-before-vararg
         super(SaltClientTimeout, self).__init__(message, *args, **kwargs)
         self.jid = jid
 
@@ -348,6 +348,12 @@ class EauthAuthenticationError(SaltException):
 class TokenAuthenticationError(SaltException):
     '''
     Thrown when token authentication fails
+    '''
+
+
+class SaltDeserializationError(SaltException):
+    '''
+    Thrown when salt cannot deserialize data.
     '''
 
 
@@ -568,25 +574,7 @@ class MissingSmb(SaltException):
     '''
 
 
-class NxosError(SaltException):
+class LoggingRuntimeError(RuntimeError):
     '''
-    NX-OS Base Exception class
-    '''
-
-
-class NxosCliError(NxosError):
-    '''
-    NX-OS Cli Error raised when Cli command rejected by the NX-OS device
-    '''
-
-
-class NxosClientError(NxosError):
-    '''
-    NX-OS Client Error raised for problems connecting to the NX-OS device
-    '''
-
-
-class NxosRequestNotSupported(NxosError):
-    '''
-    Raised for unsupported client requests
+    Raised when we encounter an error while logging
     '''

@@ -2,9 +2,9 @@
 '''
 Azure (ARM) DNS Execution Module
 
-.. versionadded:: Fluorine
+.. versionadded:: 3000
 
-:maintainer: <nicholasmhughes@gmail.com>
+:maintainer: <devops@eitr.tech>
 :maturity: new
 :depends:
     * `azure <https://pypi.python.org/pypi/azure>`_ >= 2.0.0
@@ -18,37 +18,32 @@ Azure (ARM) DNS Execution Module
     * `azure-mgmt-web <https://pypi.python.org/pypi/azure-mgmt-web>`_ >= 0.32.0
     * `azure-storage <https://pypi.python.org/pypi/azure-storage>`_ >= 0.34.3
     * `msrestazure <https://pypi.python.org/pypi/msrestazure>`_ >= 0.4.21
-
 :platform: linux
-:configuration:
-    This module requires Azure Resource Manager credentials to be passed as keyword arguments
-    to every function in order to work properly.
 
-Required provider parameters:
+:configuration: This module requires Azure Resource Manager credentials to be passed as keyword arguments
+to every function in order to work properly.
+
+    Required provider parameters:
 
     if using username and password:
-
-        * ``subscription_id``
-        * ``username``
-        * ``password``
+      * ``subscription_id``
+      * ``username``
+      * ``password``
 
     if using a service principal:
+      * ``subscription_id``
+      * ``tenant``
+      * ``client_id``
+      * ``secret``
 
-        * ``subscription_id``
-        * ``tenant``
-        * ``client_id``
-        * ``secret``
-
-Optional provider parameters:
+    Optional provider parameters:
 
     **cloud_environment**: Used to point the cloud driver to different API endpoints, such as Azure GovCloud.
-
     Possible values:
-
-        * ``AZURE_PUBLIC_CLOUD`` (default)
-        * ``AZURE_CHINA_CLOUD``
-        * ``AZURE_US_GOV_CLOUD``
-        * ``AZURE_GERMAN_CLOUD``
+      * ``AZURE_PUBLIC_CLOUD`` (default)
+      * ``AZURE_CHINA_CLOUD``
+      * ``AZURE_US_GOV_CLOUD``
+      * ``AZURE_GERMAN_CLOUD``
 
 '''
 
@@ -85,7 +80,7 @@ def __virtual__():
 
 def record_set_create_or_update(name, zone_name, resource_group, record_type, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Creates or updates a record set within a DNS zone.
 
@@ -95,10 +90,9 @@ def record_set_create_or_update(name, zone_name, resource_group, record_type, **
 
     :param resource_group: The name of the resource group.
 
-    :param record_type:
-        The type of DNS record in this record set. Record sets of type SOA can be
-        updated but not created (they are created when the DNS zone is created).
-        Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
+    :param record_type: The type of DNS record in this record set. Record sets of type SOA can be
+    updated but not created (they are created when the DNS zone is created).
+    Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
 
     CLI Example:
 
@@ -138,7 +132,7 @@ def record_set_create_or_update(name, zone_name, resource_group, record_type, **
 
 def record_set_delete(name, zone_name, resource_group, record_type, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Deletes a record set from a DNS zone. This operation cannot be undone.
 
@@ -148,10 +142,9 @@ def record_set_delete(name, zone_name, resource_group, record_type, **kwargs):
 
     :param resource_group: The name of the resource group.
 
-    :param record_type:
-        The type of DNS record in this record set. Record sets of type SOA cannot be
-        deleted (they are deleted when the DNS zone is deleted).
-        Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
+    :param record_type: The type of DNS record in this record set. Record sets of type SOA cannot be
+    deleted (they are deleted when the DNS zone is deleted).
+    Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
 
     CLI Example:
 
@@ -179,7 +172,7 @@ def record_set_delete(name, zone_name, resource_group, record_type, **kwargs):
 
 def record_set_get(name, zone_name, resource_group, record_type, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Get a dictionary representing a record set's properties.
 
@@ -189,9 +182,8 @@ def record_set_get(name, zone_name, resource_group, record_type, **kwargs):
 
     :param resource_group: The name of the resource group.
 
-    :param record_type:
-        The type of DNS record in this record set.
-        Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
+    :param record_type: The type of DNS record in this record set.
+    Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
 
     CLI Example:
 
@@ -219,7 +211,7 @@ def record_set_get(name, zone_name, resource_group, record_type, **kwargs):
 
 def record_sets_list_by_type(zone_name, resource_group, record_type, top=None, recordsetnamesuffix=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Lists the record sets of a specified type in a DNS zone.
 
@@ -227,17 +219,14 @@ def record_sets_list_by_type(zone_name, resource_group, record_type, top=None, r
 
     :param resource_group: The name of the resource group.
 
-    :param record_type:
-        The type of record sets to enumerate.
-        Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
+    :param record_type: The type of record sets to enumerate.
+    Possible values include: 'A', 'AAAA', 'CAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT'
 
-    :param top:
-        The maximum number of record sets to return. If not specified,
-        returns up to 100 record sets.
+    :param top: The maximum number of record sets to return. If not specified,
+    returns up to 100 record sets.
 
-    :param recordsetnamesuffix:
-        The suffix label of the record set name that has
-        to be used to filter the record set enumerations.
+    :param recordsetnamesuffix: The suffix label of the record set name that has
+    to be used to filter the record set enumerations.
 
     CLI Example:
 
@@ -270,7 +259,7 @@ def record_sets_list_by_type(zone_name, resource_group, record_type, top=None, r
 
 def record_sets_list_by_dns_zone(zone_name, resource_group, top=None, recordsetnamesuffix=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Lists all record sets in a DNS zone.
 
@@ -278,13 +267,11 @@ def record_sets_list_by_dns_zone(zone_name, resource_group, top=None, recordsetn
 
     :param resource_group: The name of the resource group.
 
-    :param top:
-        The maximum number of record sets to return. If not specified,
-        returns up to 100 record sets.
+    :param top: The maximum number of record sets to return. If not specified,
+    returns up to 100 record sets.
 
-    :param recordsetnamesuffix:
-        The suffix label of the record set name that has
-        to be used to filter the record set enumerations.
+    :param recordsetnamesuffix: The suffix label of the record set name that has
+    to be used to filter the record set enumerations.
 
     CLI Example:
 
@@ -316,7 +303,7 @@ def record_sets_list_by_dns_zone(zone_name, resource_group, top=None, recordsetn
 
 def zone_create_or_update(name, resource_group, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Creates or updates a DNS zone. Does not modify DNS records within the zone.
 
@@ -369,7 +356,7 @@ def zone_create_or_update(name, resource_group, **kwargs):
 
 def zone_delete(name, resource_group, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Delete a DNS zone within a resource group.
 
@@ -402,7 +389,7 @@ def zone_delete(name, resource_group, **kwargs):
 
 def zone_get(name, resource_group, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Get a dictionary representing a DNS zone's properties, but not the
     record sets within the zone.
@@ -435,15 +422,14 @@ def zone_get(name, resource_group, **kwargs):
 
 def zones_list_by_resource_group(resource_group, top=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Lists the DNS zones in a resource group.
 
     :param resource_group: The name of the resource group.
 
-    :param top:
-        The maximum number of DNS zones to return. If not specified,
-        returns up to 100 zones.
+    :param top: The maximum number of DNS zones to return. If not specified,
+    returns up to 100 zones.
 
     CLI Example:
 
@@ -473,13 +459,12 @@ def zones_list_by_resource_group(resource_group, top=None, **kwargs):
 
 def zones_list(top=None, **kwargs):
     '''
-    .. versionadded:: Fluorine
+    .. versionadded:: 3000
 
     Lists the DNS zones in all resource groups in a subscription.
 
-    :param top:
-        The maximum number of DNS zones to return. If not specified,
-        eturns up to 100 zones.
+    :param top: The maximum number of DNS zones to return. If not specified,
+    returns up to 100 zones.
 
     CLI Example:
 

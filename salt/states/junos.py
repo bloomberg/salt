@@ -32,7 +32,7 @@ def resultdecorator(function):
 
 
 @resultdecorator
-def rpc(name, dest=None, **kwargs):
+def rpc(name, dest=None, format='xml', args=None, **kwargs):
     '''
     Executes the given rpc. The returned data can be stored in a file
     by specifying the destination path with dest as an argument
@@ -71,7 +71,15 @@ def rpc(name, dest=None, **kwargs):
               Name of the interface whose information you want.
     '''
     ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
-    ret['changes'] = __salt__['junos.rpc'](name, dest, **kwargs)
+    if args is not None:
+        ret['changes'] = __salt__['junos.rpc'](
+            name,
+            dest,
+            format,
+            *args,
+            **kwargs)
+    else:
+        ret['changes'] = __salt__['junos.rpc'](name, dest, format, **kwargs)
     return ret
 
 
@@ -154,7 +162,7 @@ def commit(name, **kwargs):
 
 
 @resultdecorator
-def rollback(name, **kwargs):
+def rollback(name, id, **kwargs):
     '''
     Rollbacks the committed changes.
 
@@ -184,12 +192,12 @@ def rollback(name, **kwargs):
 
     '''
     ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
-    ret['changes'] = __salt__['junos.rollback'](**kwargs)
+    ret['changes'] = __salt__['junos.rollback'](id, **kwargs)
     return ret
 
 
 @resultdecorator
-def diff(name, **kwargs):
+def diff(name, d_id):
     '''
     Gets the difference between the candidate and the current configuration.
 
@@ -206,12 +214,12 @@ def diff(name, **kwargs):
           The rollback id value [0-49]. (default = 0)
     '''
     ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
-    ret['changes'] = __salt__['junos.diff'](**kwargs)
+    ret['changes'] = __salt__['junos.diff'](d_id)
     return ret
 
 
 @resultdecorator
-def cli(name, format='text', **kwargs):
+def cli(name, **kwargs):
     '''
     Executes the CLI commands and reuturns the text output.
 
@@ -227,10 +235,10 @@ def cli(name, format='text', **kwargs):
         * command:
           The command that need to be executed on Junos CLI. (default = None)
       Optional
-        * format:
-          Format in which to get the CLI output. (text or xml, \
-            default = 'text')
         * kwargs: Keyworded arguments which can be provided like-
+            * format:
+              Format in which to get the CLI output. (text or xml, \
+                default = 'text')
             * timeout:
               Set NETCONF RPC timeout. Can be used for commands which
               take a while to execute. (default = 30 seconds)
@@ -239,7 +247,7 @@ def cli(name, format='text', **kwargs):
                (default = None)
     '''
     ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
-    ret['changes'] = __salt__['junos.cli'](name, format, **kwargs)
+    ret['changes'] = __salt__['junos.cli'](name, **kwargs)
     return ret
 
 
@@ -533,49 +541,4 @@ def commit_check(name):
     '''
     ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
     ret['changes'] = __salt__['junos.commit_check']()
-    return ret
-
-
-@resultdecorator
-def get_table(name, table, table_file, **kwargs):
-    '''
-    Retrieve data from a Junos device using Tables/Views
-
-    name (required)
-        task definition
-
-    table (required)
-        Name of PyEZ Table
-
-    file
-        YAML file that has the table specified in table parameter
-
-    path:
-        Path of location of the YAML file.
-        defaults to op directory in jnpr.junos.op
-
-    target:
-        if command need to run on FPC, can specify fpc target
-
-    key:
-        To overwrite key provided in YAML
-
-    key_items:
-        To select only given key items
-
-    filters:
-        To select only filter for the dictionary from columns
-
-    template_args:
-        key/value pair which should render Jinja template command
-
-    .. code-block:: yaml
-
-        get route details:
-          junos.get_table:
-            - table: RouteTable
-            - file: routes.yml
-    '''
-    ret = {'name': name, 'changes': {}, 'result': True, 'comment': ''}
-    ret['changes'] = __salt__['junos.get_table'](table, table_file, **kwargs)
     return ret

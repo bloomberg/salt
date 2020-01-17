@@ -118,8 +118,7 @@ def _publish(
             'id': __opts__['id'],
             'no_parse': __opts__.get('no_parse', [])}
 
-    channel = salt.transport.client.ReqChannel.factory(__opts__, master_uri=master_uri)
-    try:
+    with salt.transport.client.ReqChannel.factory(__opts__, master_uri=master_uri) as channel:
         try:
             peer_data = channel.send(load)
         except SaltReqTimeoutError:
@@ -173,8 +172,6 @@ def _publish(
                 return cret
             else:
                 return ret
-    finally:
-        channel.close()
 
     return {}
 
@@ -326,10 +323,8 @@ def runner(fun, arg=None, timeout=5):
             'id': __opts__['id'],
             'no_parse': __opts__.get('no_parse', [])}
 
-    channel = salt.transport.client.ReqChannel.factory(__opts__)
-    try:
-        return channel.send(load)
-    except SaltReqTimeoutError:
-        return '\'{0}\' runner publish timed out'.format(fun)
-    finally:
-        channel.close()
+    with salt.transport.client.ReqChannel.factory(__opts__) as channel:
+        try:
+            return channel.send(load)
+        except SaltReqTimeoutError:
+            return '\'{0}\' runner publish timed out'.format(fun)

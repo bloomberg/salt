@@ -204,19 +204,22 @@ def yamlify_arg(arg):
 
         elif arg is None \
                 or isinstance(arg, (list, float, six.integer_types, six.string_types)):
-            # yaml.safe_load will load '|' as '', don't let it do that.
-            if arg == '' and original_arg in ('|',):
+            # yaml.safe_load will load '|' and '!' as '', don't let it do that.
+            if arg == '' and original_arg in ('|', '!'):
                 return original_arg
             # yaml.safe_load will treat '#' as a comment, so a value of '#'
             # will become None. Keep this value from being stomped as well.
             elif arg is None and original_arg.strip().startswith('#'):
+                return original_arg
+            # Other times, yaml.safe_load will load '!' as None. Prevent that.
+            elif arg is None and original_arg == '!':
                 return original_arg
             else:
                 return arg
         else:
             # we don't support this type
             return original_arg
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         # In case anything goes wrong...
         return original_arg
 
@@ -275,7 +278,7 @@ def get_function_argspec(func, is_class_method=None):
             aspec = _getargspec(func)
             del aspec.args[0]  # self
         elif inspect.isfunction(func):
-            aspec = _getargspec(func)  # pylint: disable=redefined-variable-type
+            aspec = _getargspec(func)
         elif inspect.ismethod(func):
             aspec = _getargspec(func)
             del aspec.args[0]  # self

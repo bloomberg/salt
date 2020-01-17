@@ -280,7 +280,7 @@ def __get_certificates(command,
 
     if http_dc_validation:
         validation_tag = sslresult.getElementsByTagName('HttpDCValidation')
-        if validation_tag:
+        if validation_tag is not None and len(validation_tag) > 0:
             validation_tag = validation_tag[0]
 
             if validation_tag.getAttribute('ValueAvailable').lower() == 'true':
@@ -389,7 +389,7 @@ def renew(years, certificate_id, certificate_type, promotion_code=None):
         raise Exception('Invalid option for certificate_type=' + certificate_type)
 
     if years < 1 or years > 5:
-        log.error('Invalid option for years=%s', years)
+        log.error('Invalid option for years=%s', six.text_type(years))
         raise Exception('Invalid option for years=' + six.text_type(years))
 
     opts = salt.utils.namecheap.get_opts('namecheap.ssl.renew')
@@ -479,23 +479,23 @@ def create(years, certificate_type, promotion_code=None, sans_to_add=None):
     |          |                |                      |                   | parameter      |
     +----------+----------------+----------------------+-------------------+----------------+
     | Comodo   | PositiveSSL    | 3                    | 100               | 97             |
-    |          | Multi-Domain   |		       |                   |                |
+    |          | Multi-Domain   |                      |                   |                |
     +----------+----------------+----------------------+-------------------+----------------+
-    | Comodo   | Multi-Domain   | 3                    | 100               | 97   	    |
-    |          | SSL            |		       |                   |		    |
+    | Comodo   | Multi-Domain   | 3                    | 100               | 97             |
+    |          | SSL            |                      |                   |                |
     +----------+----------------+----------------------+-------------------+----------------+
     | Comodo   | EV Multi-      | 3                    | 100               | 97             |
-    |          | Domain SSL     |		       |                   |                |
+    |          | Domain SSL     |                      |                   |                |
     +----------+----------------+----------------------+-------------------+----------------+
     | Comodo   | Unified        | 3                    | 100               | 97             |
-    |          | Communications |                      |  		   |                |
+    |          | Communications |                      |                   |                |
     +----------+----------------+----------------------+-------------------+----------------+
     | GeoTrust | QuickSSL       | 1                    | 1 domain +        | The only       |
     |          | Premium        |                      | 4 subdomains      | supported      |
     |          |                |                      |                   | value is 4     |
     +----------+----------------+----------------------+-------------------+----------------+
     | GeoTrust | True           | 5                    | 25                | 20             |
-    |          | BusinessID     |                      |		   |                |
+    |          | BusinessID     |                      |                   |                |
     |          | with EV        |                      |                   |                |
     |          | Multi-Domain   |                      |                   |                |
     +----------+----------------+----------------------+-------------------+----------------+
@@ -567,7 +567,7 @@ def create(years, certificate_type, promotion_code=None, sans_to_add=None):
         raise Exception('Invalid option for certificate_type=' + certificate_type)
 
     if years < 1 or years > 5:
-        log.error('Invalid option for years=%s', years)
+        log.error('Invalid option for years=%s', six.text_type(years))
         raise Exception('Invalid option for years=' + six.text_type(years))
 
     opts = salt.utils.namecheap.get_opts('namecheap.ssl.create')

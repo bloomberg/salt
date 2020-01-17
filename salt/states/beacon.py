@@ -31,9 +31,9 @@ Management of the Salt beacons
               - 0.1
               - 1.0
 
-    .. versionadded:: Neon
+    .. versionadded:: 3000
 
-    Beginning in the Neon release, multiple copies of a beacon can be configured
+    Beginning in the 3000 release, multiple copies of a beacon can be configured
     using the ``beacon_module`` parameter.
 
     inotify_infs:
@@ -83,30 +83,13 @@ def present(name,
     '''
     Ensure beacon is configured with the included beacon data.
 
-    Args:
+    name
+        The name of the beacon ensure is configured.
+    save
+        True/False, if True the beacons.conf file be updated too. Default is False.
 
-        name (str):
-            The name of the beacon ensure is configured.
-
-        save (bool):
-            ``True`` updates the beacons.conf. Default is ``False``.
-
-    Returns:
-        dict: A dictionary of information about the results of the state
-
-    Example:
-
-    .. code-block:: yaml
-
-        ps_beacon:
-          beacon.present:
-            - name: ps
-            - save: True
-            - enable: False
-            - services:
-                salt-master: running
-                apache2: stopped
     '''
+
     ret = {'name': name,
            'result': True,
            'changes': {},
@@ -156,7 +139,7 @@ def present(name,
         if __opts__.get('test'):
             ret['comment'].append('Beacon {0} would be saved'.format(name))
         else:
-            __salt__['beacons.save'](**kwargs)
+            result = __salt__['beacons.save']()
             ret['comment'].append('Beacon {0} saved'.format(name))
 
     ret['comment'] = '\n'.join(ret['comment'])
@@ -169,26 +152,16 @@ def absent(name,
     '''
     Ensure beacon is absent.
 
-    Args:
+    name
+        The name of the beacon ensured absent.
+    save
+        True/False, if True the beacons.conf file be updated too. Default is False.
 
-        name (str):
-            The name of the beacon ensured absent.
-
-        save (bool):
-            ``True`` updates the beacons.conf file. Default is ``False``.
-
-    Returns:
-        dict: A dictionary containing the results of the state run
-
-    Example:
-
-    .. code-block:: yaml
-
-        remove_beacon:
-          beacon.absent:
-            - name: ps
-            - save: True
     '''
+    ### NOTE: The keyword arguments in **kwargs are ignored in this state, but
+    ###       cannot be removed from the function definition, otherwise the use
+    ###       of unsupported arguments will result in a traceback.
+
     ret = {'name': name,
            'result': True,
            'changes': {},
@@ -215,7 +188,7 @@ def absent(name,
         if __opts__.get('test'):
             ret['comment'].append('Beacon {0} would be saved'.format(name))
         else:
-            __salt__['beacons.save'](**kwargs)
+            result = __salt__['beacons.save']()
             ret['comment'].append('Beacon {0} saved'.format(name))
 
     ret['comment'] = '\n'.join(ret['comment'])
@@ -226,22 +199,14 @@ def enabled(name, **kwargs):
     '''
     Enable a beacon.
 
-    Args:
+    name
+        The name of the beacon to enable.
 
-        name (str):
-            The name of the beacon to enable.
-
-    Returns:
-        dict: A dictionary containing the results of the state run
-
-    Example:
-
-    .. code-block:: yaml
-
-        enable_beacon:
-          beacon.enabled:
-            - name: ps
     '''
+    ### NOTE: The keyword arguments in **kwargs are ignored in this state, but
+    ###       cannot be removed from the function definition, otherwise the use
+    ###       of unsupported arguments will result in a traceback.
+
     ret = {'name': name,
            'result': True,
            'changes': {},
@@ -272,22 +237,14 @@ def disabled(name, **kwargs):
     '''
     Disable a beacon.
 
-    Args:
+    name
+        The name of the beacon to disable.
 
-        name (str):
-            The name of the beacon to disable.
-
-    Returns:
-        dict: A dictionary containing the results of the state run
-
-    Example:
-
-    .. code-block:: yaml
-
-        disable_beacon:
-          beacon.disabled:
-            - name: ps
     '''
+    ### NOTE: The keyword arguments in **kwargs are ignored in this state, but
+    ###       cannot be removed from the function definition, otherwise the use
+    ###       of unsupported arguments will result in a traceback.
+
     ret = {'name': name,
            'result': True,
            'changes': {},

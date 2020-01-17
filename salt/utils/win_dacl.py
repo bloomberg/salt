@@ -665,7 +665,7 @@ def dacl(obj_name=None, obj_type='file'):
                     log.exception('Invalid access mode: %s', access_mode)
                     raise SaltInvocationError(
                         'Invalid access mode: {0}'.format(access_mode))
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 return False, 'Error: {0}'.format(exc)
 
             return True
@@ -931,6 +931,7 @@ def dacl(obj_name=None, obj_type='file'):
                     if ace[1] & perm == perm:
                         ace_perms.append(
                             self.ace_perms[obj_type]['advanced'][perm])
+                ace_perms.sort()
 
             # If still nothing, it must be undefined
             if not ace_perms:

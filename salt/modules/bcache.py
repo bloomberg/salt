@@ -75,7 +75,7 @@ def uuid(dev=None):
         else:
             # basename of the /sys/block/{dev}/bcache/cache symlink target
             return os.path.basename(_bcsys(dev, 'cache'))
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         return False
 
 
@@ -105,7 +105,10 @@ def attach_(dev=None):
             if 'cache' in data:
                 res[dev] = attach_(dev)
 
-        return res if res else None
+        if res:
+            return res
+        else:
+            return None
 
     bcache = uuid(dev)
     if bcache:
@@ -147,7 +150,10 @@ def detach(dev=None):
             if 'cache' in data:
                 res[dev] = detach(dev)
 
-        return res if res else None
+        if res:
+            return res
+        else:
+            return None
 
     log.debug('Detaching %s', dev)
     if not _bcsys(dev, 'detach', 'goaway', 'error', 'Error detaching {0}'.format(dev)):
@@ -486,7 +492,7 @@ def device(dev, stats=False, config=False, internals=False, superblock=False):
 
         try:
             result['dev'] = os.path.basename(_bcsys(dev, 'dev'))
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             pass
         result['bdev'] = _bdev(dev)
 
@@ -598,10 +604,10 @@ def super_(dev):
 
         try:
             rval = int(rval)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             try:
                 rval = float(rval)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 if rval == 'yes':
                     rval = True
                 elif rval == 'no':
@@ -662,7 +668,7 @@ def _bdev(dev=None):
     if not dev:
         return False
     else:
-        return _devbase(os.path.dirname(dev))
+        return _devbase(os.path.realpath(os.path.join(dev, '../')))
 
 
 def _bcpath(dev):
@@ -794,10 +800,10 @@ def _sysfs_parse(path, base_attr=None, stats=False, config=False, internals=Fals
                 val = val.strip()
                 try:
                     val = int(val)
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     try:
                         val = float(val)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-except
                         pass
                 listres[key.strip()] = val
             result[strlist] = listres
@@ -840,7 +846,7 @@ def _size_map(size):
                 size = 1024**2 * float(re.sub(r'[Mm]', '', size))
             size = int(size)
         return size
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         return None
 
 

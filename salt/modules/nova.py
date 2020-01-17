@@ -106,6 +106,9 @@ __func_alias__ = {
 # Define the module's virtual name
 __virtualname__ = 'nova'
 
+# Define the module's virtual name
+__virtualname__ = 'nova'
+
 
 def __virtual__():
     '''

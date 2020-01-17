@@ -14,6 +14,13 @@ from salt.ext import six
 LAST_JID_DATETIME = None
 
 
+def _utc_now():
+    '''
+    Helper method so tests do not have to patch the built-in method.
+    '''
+    return datetime.datetime.utcnow()
+
+
 def gen_jid(opts=None):
     '''
     Generate a jid
@@ -27,10 +34,7 @@ def gen_jid(opts=None):
         opts = {}
     global LAST_JID_DATETIME  # pylint: disable=global-statement
 
-    if opts.get('utc_jid', False):
-        jid_dt = datetime.datetime.utcnow()
-    else:
-        jid_dt = datetime.datetime.now()
+    jid_dt = _utc_now()
     if not opts.get('unique_jid', False):
         return '{0:%Y%m%d%H%M%S%f}'.format(jid_dt)
     if LAST_JID_DATETIME and LAST_JID_DATETIME >= jid_dt:

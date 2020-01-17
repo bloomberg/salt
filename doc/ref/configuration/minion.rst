@@ -280,28 +280,6 @@ to the next master in the list if it finds the existing one is dead.
 
     master_alive_interval: 30
 
-.. conf_minion:: master_return_strategy
-
-``master_return_strategy``
---------------------------
-
-.. versionadded:: 2018.x.x
-
-Default: ``source``
-
-This option controls the master return strategy. Can be ``source`` or ``any``.
-If set to ``source``, then the minion will only attempt to return the job
-results to the master that sent the job. If set to ``any``, then the minion
-will attempt to return the job results to the master that sent the job but if
-that fails, then the minion will attempt to return the job results to the next
-connected master in the configuration. :conf_minion:`master_alive_interval`
-must also be set. This is used to keep track of which masters are currently
-connected.
-
-.. code-block:: yaml
-
-    master_return_strategy: source
-
 .. conf_minion:: master_shuffle
 
 ``master_shuffle``
@@ -679,7 +657,7 @@ FQDN (for instance, Solaris).
 ``minion_id_remove_domain``
 ---------------------------
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 Default: ``False``
 
@@ -835,7 +813,7 @@ matches, and regular expressions are supported.
     Some states and execution modules depend on grains. Filtering may cause
     them to be unavailable or run unreliably.
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 .. code-block:: yaml
 
@@ -1415,7 +1393,7 @@ creates a new connection for every return to the master.
 Default: ``ipc``
 
 Windows platforms lack POSIX IPC and must rely on slower TCP based inter-
-process communications. Set ipc_mode to ``tcp`` on such systems.
+process communications. ``ipc_mode`` is set to ``tcp`` on such systems.
 
 .. code-block:: yaml
 
@@ -1581,6 +1559,21 @@ List of hosts to bypass HTTP proxy
 .. code-block:: yaml
 
     no_proxy: [ '127.0.0.1', 'foo.tld' ]
+
+``use_yamlloader_old``
+------------------------
+
+.. versionadded:: 2019.2.1
+
+Default: ``False``
+
+Use the pre-2019.2 YAML renderer.
+Uses legacy YAML rendering to support some legacy inline data structures.
+See the :ref:`2019.2.1 release notes <release-2019-2-1>` for more details.
+
+.. code-block:: yaml
+
+    use_yamlloader_old: False
 
 Docker Configuration
 ====================
@@ -2087,6 +2080,21 @@ List of states to run when the minion starts up if ``startup_states`` is set to 
     sls_list:
       - edit.vim
       - hyper
+
+.. conf_minion:: start_event_grains
+
+``start_event_grains``
+----------------------
+
+Default: ``[]``
+
+List of grains to pass in start event when minion starts up.
+
+.. code-block:: yaml
+
+    start_event_grains:
+      - machine_id
+      - uuid
 
 .. conf_minion:: top_file
 

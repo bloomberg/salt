@@ -31,14 +31,11 @@ class PipModuleTest(ModuleCase):
 
     def setUp(self):
         super(PipModuleTest, self).setUp()
-
         self.venv_test_dir = tempfile.mkdtemp(dir=RUNTIME_VARS.TMP)
         # Remove the venv test directory
         self.addCleanup(shutil.rmtree, self.venv_test_dir, ignore_errors=True)
         self.venv_dir = os.path.join(self.venv_test_dir, 'venv')
         self.pip_temp = os.path.join(self.venv_test_dir, '.pip-temp')
-        # Remove the pip-temp directory
-        self.addCleanup(shutil.rmtree, self.pip_temp, ignore_errors=True)
         if not os.path.isdir(self.pip_temp):
             os.makedirs(self.pip_temp)
         self.patched_environ = patched_environ(
@@ -48,8 +45,6 @@ class PipModuleTest(ModuleCase):
         )
         self.patched_environ.__enter__()
         self.addCleanup(self.patched_environ.__exit__)
-        for item in ('venv_dir', 'venv_test_dir', 'pip_temp'):
-            self.addCleanup(delattr, self, item)
 
     def _create_virtualenv(self, path):
         '''
@@ -65,7 +60,22 @@ class PipModuleTest(ModuleCase):
             if salt.utils.platform.is_windows():
                 python = os.path.join(sys.real_prefix, os.path.basename(sys.executable))
             else:
-                python = os.path.join(sys.real_prefix, 'bin', os.path.basename(sys.executable))
+                python_binary_names = [
+                    'python{}.{}'.format(*sys.version_info),
+                    'python{}'.format(*sys.version_info),
+                    'python'
+                ]
+                for binary_name in python_binary_names:
+                    python = os.path.join(sys.real_prefix, 'bin', binary_name)
+                    if os.path.exists(python):
+                        break
+                else:
+                    self.fail(
+                        'Couldn\'t find a python binary name under \'{}\' matching: {}'.format(
+                            os.path.join(sys.real_prefix, 'bin'),
+                            python_binary_names
+                        )
+                    )
             # We're running off a virtualenv, and we don't want to create a virtualenv off of
             # a virtualenv
             kwargs = {'python': python}

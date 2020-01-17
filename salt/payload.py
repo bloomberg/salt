@@ -16,8 +16,9 @@ import datetime
 import salt.log
 import salt.transport.frame
 import salt.utils.immutabletypes as immutabletypes
+import salt.utils.msgpack
 import salt.utils.stringutils
-from salt.exceptions import SaltReqTimeoutError
+from salt.exceptions import SaltReqTimeoutError, SaltDeserializationError
 from salt.utils.data import CaseInsensitiveDict
 
 # Import third party libs
@@ -30,68 +31,20 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-HAS_MSGPACK = False
-try:
-    # Attempt to import msgpack
-    import msgpack
-    # There is a serialization issue on ARM and potentially other platforms
-    # for some msgpack bindings, check for it
-    if msgpack.version >= (0, 4, 0):
-        if msgpack.loads(msgpack.dumps([1, 2, 3], use_bin_type=False), use_list=True) is None:
-            raise ImportError
-    else:
-        if msgpack.loads(msgpack.dumps([1, 2, 3]), use_list=True) is None:
-            raise ImportError
-    HAS_MSGPACK = True
-except ImportError:
-    # Fall back to msgpack_pure
-    try:
-        import msgpack_pure as msgpack  # pylint: disable=import-error
-        HAS_MSGPACK = True
-    except ImportError:
-        # TODO: Come up with a sane way to get a configured logfile
-        #       and write to the logfile when this error is hit also
-        LOG_FORMAT = '[%(levelname)-8s] %(message)s'
-        salt.log.setup_console_logger(log_format=LOG_FORMAT)
-        log.fatal('Unable to import msgpack or msgpack_pure python modules')
-        # Don't exit if msgpack is not available, this is to make local mode
-        # work without msgpack
-        #sys.exit(salt.defaults.exitcodes.EX_GENERIC)
-
-
-if HAS_MSGPACK:
-    import salt.utils.msgpack
-
-
-if HAS_MSGPACK and not hasattr(msgpack, 'exceptions'):
-    class PackValueError(Exception):
-        '''
-        older versions of msgpack do not have PackValueError
-        '''
-
-    class exceptions(object):
-        '''
-        older versions of msgpack do not have an exceptions module
-        '''
-        PackValueError = PackValueError()
-
-    msgpack.exceptions = exceptions()
-
 
 def package(payload):
     '''
     This method for now just wraps msgpack.dumps, but it is here so that
     we can make the serialization a custom option in the future with ease.
     '''
-    return salt.utils.msgpack.dumps(payload, _msgpack_module=msgpack)
+    return salt.utils.msgpack.dumps(payload)
 
 
 def unpackage(package_):
     '''
     Unpackages a payload
     '''
-    return salt.utils.msgpack.loads(package_, use_list=True,
-                                    _msgpack_module=msgpack)
+    return salt.utils.msgpack.loads(package_, use_list=True)
 
 
 def format_payload(enc, **kwargs):
@@ -146,14 +99,13 @@ class Serial(object):
 
             gc.disable()  # performance optimization for msgpack
             loads_kwargs = {'use_list': True,
-                            'ext_hook': ext_type_decoder,
-                            '_msgpack_module': msgpack}
-            if msgpack.version >= (0, 4, 0):
+                            'ext_hook': ext_type_decoder}
+            if salt.utils.msgpack.version >= (0, 4, 0):
                 # msgpack only supports 'encoding' starting in 0.4.0.
                 # Due to this, if we don't need it, don't pass it at all so
                 # that under Python 2 we can still work with older versions
                 # of msgpack.
-                if msgpack.version >= (0, 5, 2):
+                if salt.utils.msgpack.version >= (0, 5, 2):
                     if encoding is None:
                         loads_kwargs['raw'] = True
                     else:
@@ -161,7 +113,7 @@ class Serial(object):
                 else:
                     loads_kwargs['encoding'] = encoding
                 try:
-                    ret = salt.utils.msgpack.loads(msg, **loads_kwargs)
+                    ret = salt.utils.msgpack.unpackb(msg, **loads_kwargs)
                 except UnicodeDecodeError:
                     # msg contains binary data
                     loads_kwargs.pop('raw', None)
@@ -171,7 +123,7 @@ class Serial(object):
                 ret = salt.utils.msgpack.loads(msg, **loads_kwargs)
             if six.PY3 and encoding is None and not raw:
                 ret = salt.transport.frame.decode_embedded_strs(ret)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.critical(
                 'Could not deserialize msgpack message. This often happens '
                 'when trying to read a file not in binary mode. '
@@ -180,7 +132,13 @@ class Serial(object):
             )
             log.debug('Msgpack deserialization failure on message: %s', msg)
             gc.collect()
-            raise
+            raise six.raise_from(
+                SaltDeserializationError(
+                    'Could not deserialize msgpack message.'
+                    ' See log for more info.'
+                ),
+                exc,
+            )
         finally:
             gc.enable()
         return ret
@@ -216,7 +174,7 @@ class Serial(object):
                 # msgpack doesn't support datetime.datetime and datetime.date datatypes.
                 # So here we have converted these types to custom datatype
                 # This is msgpack Extended types numbered 78
-                return msgpack.ExtType(78, salt.utils.stringutils.to_bytes(
+                return salt.utils.msgpack.ExtType(78, salt.utils.stringutils.to_bytes(
                     obj.strftime('%Y%m%dT%H:%M:%S.%f')))
             # The same for immutable types
             elif isinstance(obj, immutabletypes.ImmutableDict):
@@ -232,18 +190,8 @@ class Serial(object):
             return obj
 
         try:
-            if msgpack.version >= (0, 4, 0):
-                # msgpack only supports 'use_bin_type' starting in 0.4.0.
-                # Due to this, if we don't need it, don't pass it at all so
-                # that under Python 2 we can still work with older versions
-                # of msgpack.
-                return salt.utils.msgpack.dumps(msg, default=ext_type_encoder,
-                                                use_bin_type=use_bin_type,
-                                                _msgpack_module=msgpack)
-            else:
-                return salt.utils.msgpack.dumps(msg, default=ext_type_encoder,
-                                                _msgpack_module=msgpack)
-        except (OverflowError, msgpack.exceptions.PackValueError):
+            return salt.utils.msgpack.packb(msg, default=ext_type_encoder, use_bin_type=use_bin_type)
+        except (OverflowError, salt.utils.msgpack.exceptions.PackValueError):
             # msgpack<=0.4.6 don't call ext encoder on very long integers raising the error instead.
             # Convert any very long longs to strings and call dumps again.
             def verylong_encoder(obj, context):
@@ -270,13 +218,7 @@ class Serial(object):
                     return obj
 
             msg = verylong_encoder(msg, set())
-            if msgpack.version >= (0, 4, 0):
-                return salt.utils.msgpack.dumps(msg, default=ext_type_encoder,
-                                                use_bin_type=use_bin_type,
-                                                _msgpack_module=msgpack)
-            else:
-                return salt.utils.msgpack.dumps(msg, default=ext_type_encoder,
-                                                _msgpack_module=msgpack)
+            return salt.utils.msgpack.packb(msg, default=ext_type_encoder, use_bin_type=use_bin_type)
 
     def dump(self, msg, fn_):
         '''
@@ -422,5 +364,7 @@ class SREQ(object):
         if self.context.closed is False:
             self.context.term()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701

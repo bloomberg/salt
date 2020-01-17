@@ -1,25 +1,4 @@
 # -*- coding: utf-8 -*-
-#
-# Author: Alberto Planas <aplanas@suse.com>
-#
-# Copyright 2018 SUSE LINUX GmbH, Nuernberg, Germany.
-#
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
 
 '''
 :maintainer:    Alberto Planas <aplanas@suse.com>
@@ -31,19 +10,13 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 # Import Salt Testing Libs
 from tests.support.mixins import LoaderModuleMockMixin
-from tests.support.unit import skipIf, TestCase
-from tests.support.mock import (
-    MagicMock,
-    NO_MOCK,
-    NO_MOCK_REASON,
-    patch,
-)
+from tests.support.unit import TestCase
+from tests.support.mock import MagicMock, patch
 
 from salt.exceptions import CommandExecutionError
 import salt.modules.freezer as freezer
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 class FreezerTestCase(TestCase, LoaderModuleMockMixin):
     '''
     Test cases for salt.modules.freezer
@@ -116,6 +89,30 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
     @patch('salt.modules.freezer.fopen')
     @patch('salt.modules.freezer.status')
     @patch('os.makedirs')
+    def test_freeze_success_two_freeze(self, makedirs, status, fopen, dump):
+        '''
+        Test to freeze a current installation
+        '''
+        # Freeze the current new state
+        status.return_value = False
+        salt_mock = {
+            'pkg.list_pkgs': MagicMock(return_value={}),
+            'pkg.list_repos': MagicMock(return_value={}),
+        }
+        with patch.dict(freezer.__salt__, salt_mock):
+            self.assertTrue(freezer.freeze('one'))
+            self.assertTrue(freezer.freeze('two'))
+
+            self.assertEqual(makedirs.call_count, 2)
+            self.assertEqual(salt_mock['pkg.list_pkgs'].call_count, 2)
+            self.assertEqual(salt_mock['pkg.list_repos'].call_count, 2)
+            fopen.assert_called()
+            dump.assert_called()
+
+    @patch('salt.utils.json.dump')
+    @patch('salt.modules.freezer.fopen')
+    @patch('salt.modules.freezer.status')
+    @patch('os.makedirs')
     def test_freeze_success_new_state(self, makedirs, status, fopen, dump):
         '''
         Test to freeze a current installation
@@ -132,7 +129,7 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_pkgs'].assert_called_once()
             salt_mock['pkg.list_repos'].assert_called_once()
             fopen.assert_called()
-            dump.asster_called()
+            dump.assert_called()
 
     @patch('salt.utils.json.dump')
     @patch('salt.modules.freezer.fopen')
@@ -154,7 +151,7 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_pkgs'].assert_called_once()
             salt_mock['pkg.list_repos'].assert_called_once()
             fopen.assert_called()
-            dump.asster_called()
+            dump.assert_called()
 
     @patch('salt.modules.freezer.status')
     def test_restore_fails_missing_state(self, status):
@@ -190,7 +187,7 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_repos'].assert_called()
             salt_mock['pkg.mod_repo'].assert_called_once()
             fopen.assert_called()
-            load.asster_called()
+            load.assert_called()
 
     @patch('salt.utils.json.load')
     @patch('salt.modules.freezer.fopen')
@@ -217,7 +214,7 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_repos'].assert_called()
             salt_mock['pkg.install'].assert_called_once()
             fopen.assert_called()
-            load.asster_called()
+            load.assert_called()
 
     @patch('salt.utils.json.load')
     @patch('salt.modules.freezer.fopen')
@@ -244,7 +241,7 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_repos'].assert_called()
             salt_mock['pkg.remove'].assert_called_once()
             fopen.assert_called()
-            load.asster_called()
+            load.assert_called()
 
     @patch('salt.utils.json.load')
     @patch('salt.modules.freezer.fopen')
@@ -271,4 +268,30 @@ class FreezerTestCase(TestCase, LoaderModuleMockMixin):
             salt_mock['pkg.list_repos'].assert_called()
             salt_mock['pkg.del_repo'].assert_called_once()
             fopen.assert_called()
-            load.asster_called()
+            load.assert_called()
+
+    @patch('os.remove')
+    @patch('salt.utils.json.load')
+    @patch('salt.modules.freezer.fopen')
+    @patch('salt.modules.freezer.status')
+    def test_restore_clean_yml(self, status, fopen, load, remove):
+        '''
+        Test to restore an old state
+        '''
+        status.return_value = True
+        salt_mock = {
+            'pkg.list_pkgs': MagicMock(return_value={}),
+            'pkg.list_repos': MagicMock(return_value={}),
+            'pkg.install': MagicMock(),
+        }
+        with patch.dict(freezer.__salt__, salt_mock):
+            self.assertEqual(freezer.restore(clean=True), {
+                'pkgs': {'add': [], 'remove': []},
+                'repos': {'add': [], 'remove': []},
+                'comment': [],
+            })
+            salt_mock['pkg.list_pkgs'].assert_called()
+            salt_mock['pkg.list_repos'].assert_called()
+            fopen.assert_called()
+            load.assert_called()
+            self.assertEqual(remove.call_count, 2)

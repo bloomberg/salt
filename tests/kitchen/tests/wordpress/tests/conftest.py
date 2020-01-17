@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-
 from __future__ import absolute_import
 import functools
 import os
-import subprocess
 import pytest
+import subprocess
 import testinfra
 
 if os.environ.get('KITCHEN_USERNAME') == 'vagrant':

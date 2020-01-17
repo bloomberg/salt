@@ -30,6 +30,7 @@ from copy import deepcopy
 from salt.utils.json import loads, dumps
 from salt.ext import six
 # import NAPALM utils
+import salt.utils.json
 import salt.utils.napalm
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -69,7 +70,7 @@ def _ordered_dict_to_dict(probes):
 
     '''.'''
 
-    return loads(dumps(probes))
+    return salt.utils.json.loads(salt.utils.json.dumps(probes))
 
 
 def _expand_users(device_users, common_users):

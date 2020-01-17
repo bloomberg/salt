@@ -35,6 +35,7 @@ import salt.utils.event
 import salt.utils.files
 import salt.utils.gitfs
 import salt.utils.verify
+import salt.utils.mine
 import salt.utils.minions
 import salt.utils.gzip_util
 import salt.utils.jid
@@ -44,8 +45,6 @@ import salt.utils.platform
 import salt.utils.stringutils
 import salt.utils.user
 import salt.utils.verify
-import salt.utils.versions
-import salt.utils.master
 from salt.defaults import DEFAULT_TARGET_DELIM
 from salt.pillar import git_pillar
 
@@ -175,42 +174,6 @@ def clean_old_jobs(opts):
         mminion.returners[fstr]()
 
 
-def clean_proc_dir(opts):
-    '''
-    Clean out old tracked jobs running on the master
-
-    Generally, anything tracking a job should remove the job
-    once the job has finished. However, this will remove any
-    jobs that for some reason were not properly removed
-    when finished or errored.
-    '''
-    serial = salt.payload.Serial(opts)
-    proc_dir = os.path.join(opts['cachedir'], 'proc')
-    for fn_ in os.listdir(proc_dir):
-        proc_file = os.path.join(*[proc_dir, fn_])
-        data = salt.utils.master.read_proc_file(proc_file, opts)
-        if not data:
-            try:
-                log.warning(
-                    "Found proc file %s without proper data. Removing from tracked proc files.",
-                    proc_file
-                )
-                os.remove(proc_file)
-            except (OSError, IOError) as err:
-                log.error('Unable to remove proc file: %s.', err)
-            continue
-        if not salt.utils.master.is_pid_healthy(data['pid']):
-            try:
-                log.warning(
-                    "PID %s not owned by salt or no longer running. Removing tracked proc file %s",
-                    data['pid'],
-                    proc_file
-                )
-                os.remove(proc_file)
-            except (OSError, IOError) as err:
-                log.error('Unable to remove proc file: %s.', err)
-
-
 def mk_key(opts, user):
     if HAS_PWD:
         uid = None
@@ -300,7 +263,7 @@ def fileserver_update(fileserver):
             )
             raise salt.exceptions.SaltMasterError('No fileserver backends available')
         fileserver.update()
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-except
         log.error(
             'Exception %s occurred in file server update', exc,
             exc_info_on_loglevel=logging.DEBUG
@@ -571,7 +534,7 @@ class RemoteFuncs(object):
                 continue
             try:
                 ret = salt.utils.dictupdate.merge(ret, self.tops[fun](opts=opts, grains=grains), merge_lists=True)
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 # If anything happens in the top generation, log it and move on
                 log.error(
                     'Top function %s failed with error %s for minion %s',
@@ -607,11 +570,9 @@ class RemoteFuncs(object):
                 if re.match(match, load['id']):
                     if isinstance(self.opts['mine_get'][match], list):
                         perms.update(self.opts['mine_get'][match])
-
             for fun in functions:
                 if any(re.match(perm, fun) for perm in perms):
                     functions_allowed.append(fun)
-
             if not functions_allowed:
                 return {}
         else:
@@ -620,15 +581,11 @@ class RemoteFuncs(object):
         ret = {}
         if not salt.utils.verify.valid_id(self.opts, load['id']):
             return ret
+
         expr_form = load.get('expr_form')
+        # keep both expr_form and tgt_type to ensure
+        # comptability between old versions of salt
         if expr_form is not None and 'tgt_type' not in load:
-            salt.utils.versions.warn_until(
-                'Neon',
-                '_mine_get: minion {0} uses pre-Nitrogen API key '
-                '"expr_form". Accepting for backwards compatibility '
-                'but this is not guaranteed '
-                'after the Neon release'.format(load['id'])
-            )
             match_type = expr_form
         else:
             match_type = load.get('tgt_type', 'glob')
@@ -643,23 +600,43 @@ class RemoteFuncs(object):
                 greedy=False
                 )
         minions = _res['minions']
+        minion_side_acl = {}  # Cache minion-side ACL
         for minion in minions:
-            fdata = self.cache.fetch('minions/{0}'.format(minion), 'mine')
-
-            if not isinstance(fdata, dict):
+            mine_data = self.cache.fetch('minions/{0}'.format(minion), 'mine')
+            if not isinstance(mine_data, dict):
                 continue
-
-            if not _ret_dict and functions_allowed and functions_allowed[0] in fdata:
-                ret[minion] = fdata.get(functions_allowed[0])
-            elif _ret_dict:
-                for fun in list(set(functions_allowed) & set(fdata.keys())):
-                    ret.setdefault(fun, {})[minion] = fdata.get(fun)
-
+            for function in functions_allowed:
+                if function not in mine_data:
+                    continue
+                mine_entry = mine_data[function]
+                mine_result = mine_data[function]
+                if isinstance(mine_entry, dict) and salt.utils.mine.MINE_ITEM_ACL_ID in mine_entry:
+                    mine_result = mine_entry[salt.utils.mine.MINE_ITEM_ACL_DATA]
+                    # Check and fill minion-side ACL cache
+                    if function not in minion_side_acl.get(minion, {}):
+                        if 'allow_tgt' in mine_entry:
+                            # Only determine allowed targets if any have been specified.
+                            # This prevents having to add a list of all minions as allowed targets.
+                            salt.utils.dictupdate.set_dict_key_value(
+                                minion_side_acl,
+                                '{}:{}'.format(minion, function),
+                                checker.check_minions(
+                                    mine_entry['allow_tgt'],
+                                    mine_entry.get('allow_tgt_type', 'glob')
+                                )['minions']
+                            )
+                if salt.utils.mine.minion_side_acl_denied(minion_side_acl, minion, function, load['id']):
+                    continue
+                if _ret_dict:
+                    ret.setdefault(function, {})[minion] = mine_result
+                else:
+                    # There is only one function in functions_allowed.
+                    ret[minion] = mine_result
         return ret
 
     def _mine(self, load, skip_verify=False):
         '''
-        Return the mine data
+        Store/update the mine data in cache.
         '''
         if not skip_verify:
             if 'id' not in load or 'data' not in load:
@@ -667,12 +644,12 @@ class RemoteFuncs(object):
         if self.opts.get('minion_data_cache', False) or self.opts.get('enforce_mine_cache', False):
             cbank = 'minions/{0}'.format(load['id'])
             ckey = 'mine'
+            new_data = load['data']
             if not load.get('clear', False):
                 data = self.cache.fetch(cbank, ckey)
                 if isinstance(data, dict):
-                    data.update(load['data'])
-                    load['data'] = data
-            self.cache.store(cbank, ckey, load['data'])
+                    data.update(new_data)
+            self.cache.store(cbank, ckey, data)
         return True
 
     def _mine_delete(self, load):
@@ -772,7 +749,6 @@ class RemoteFuncs(object):
         '''
         if any(key not in load for key in ('id', 'grains')):
             return False
-#        pillar = salt.pillar.Pillar(
         log.debug('Master _pillar using ext: %s', load.get('ext'))
         pillar = salt.pillar.get_pillar(
                 self.opts,
@@ -1142,7 +1118,7 @@ class LocalFuncs(object):
             return runner_client.asynchronous(fun,
                                               load.get('kwarg', {}),
                                               username)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.exception('Exception occurred while introspecting %s')
             return {'error': {'name': exc.__class__.__name__,
                               'args': exc.args,
@@ -1200,7 +1176,7 @@ class LocalFuncs(object):
             self.event.fire_event(data, salt.utils.event.tagify([jid, 'ret'], 'wheel'))
             return {'tag': tag,
                     'data': data}
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.exception('Exception occurred while introspecting %s', fun)
             data['return'] = 'Exception occurred in wheel {0}: {1}: {2}'.format(
                                         fun,
@@ -1351,7 +1327,7 @@ class LocalFuncs(object):
                     '"%s" does not have a save_load function!',
                     self.opts['ext_job_cache']
                 )
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 log.critical(
                     'The specified returner threw a stack trace:',
                     exc_info=True
@@ -1367,7 +1343,7 @@ class LocalFuncs(object):
                 '"%s" does not have a save_load function!',
                 self.opts['master_job_cache']
             )
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             log.critical(
                 'The specified returner threw a stack trace:',
                 exc_info=True

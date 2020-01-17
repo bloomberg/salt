@@ -26,7 +26,6 @@ import salt.utils.platform
 import salt.utils.vt
 
 # Import 3rd-party libs
-from salt.ext import six
 from salt.ext.six.moves import range  # pylint: disable=import-error,redefined-builtin
 
 
@@ -96,8 +95,8 @@ class VTTestCase(TestCase):
                         self.fail('VT is not cleaning up PTY\'s')
                 except (ValueError, OSError, IOError):
                     self.fail('Unable to find out how many PTY\'s are open')
-            except Exception as exc:
-                if 'out of pty devices' in six.text_type(exc):
+            except Exception as exc:  # pylint: disable=broad-except
+                if 'out of pty devices' in str(exc):
                     # We're not cleaning up
                     raise
                 # We're pushing the system resources, let's keep going
@@ -116,8 +115,8 @@ class VTTestCase(TestCase):
                         self.fail('VT is not cleaning up PTY\'s')
                 except (ValueError, OSError, IOError):
                     self.fail('Unable to find out how many PTY\'s are open')
-            except Exception as exc:
-                if 'out of pty devices' in exc:
+            except Exception as exc:  # pylint: disable=broad-except
+                if 'out of pty devices' in str(exc):
                     # We're not cleaning up
                     raise
                 # We're pushing the system resources, let's keep going

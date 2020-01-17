@@ -124,7 +124,7 @@ def set_(key, value, profile=None):
         return False
     conn, cur, table = _connect(profile)
     if six.PY2:
-        value = buffer(salt.utils.msgpack.packb(value))
+        value = buffer(salt.utils.msgpack.packb(value))  # pylint: disable=undefined-variable
     else:
         value = memoryview(salt.utils.msgpack.packb(value))
     q = profile.get('set_query', ('INSERT OR REPLACE INTO {0} VALUES '
@@ -148,17 +148,3 @@ def get(key, profile=None):
     if not res:
         return None
     return salt.utils.msgpack.unpackb(res[0])
-
-
-def delete(key, profile=None):
-    '''
-    Delete a key/value pair from sqlite3
-    '''
-    if not profile:
-        return None
-    conn, cur, table = _connect(profile)
-    q = profile.get('delete_query', ('DELETE FROM {0} WHERE '
-                                     'key=:key'.format(table)))
-    res = cur.execute(q, {'key': key})
-    conn.commit()
-    return cur.rowcount

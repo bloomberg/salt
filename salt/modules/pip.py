@@ -73,17 +73,16 @@ of the 2015.5 branch:
    example, cwd: 'C:\\salt\\bin\\scripts'. Sometimes python thinks the single
    back slash is an escape character.
 
+   There is a known incompatibility between Python2 pip>=10.* and Salt <=2018.3.0.
+   The issue is decribed here: https://github.com/saltstack/salt/issues/46163
+
 '''
 from __future__ import absolute_import, print_function, unicode_literals
 
 # Import python libs
 import logging
 import os
-
-try:
-    import pkg_resources
-except ImportError:
-    pkg_resources = None
+import pkg_resources
 import re
 import shutil
 import sys
@@ -120,12 +119,7 @@ def __virtual__():
     entire filesystem.  If it's not installed in a conventional location, the
     user is required to provide the location of pip each time it is used.
     '''
-    if pkg_resources is None:
-        ret = False, 'Package dependency "pkg_resource" is missing'
-    else:
-        ret = 'pip'
-
-    return ret
+    return 'pip'
 
 
 def _clear_context(bin_env=None):
@@ -440,12 +434,12 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
             use_vt=False,
             trusted_host=None,
             no_cache_dir=False,
+            extra_args=None,
             cache_dir=None,
             no_binary=None,
-            user_install=False,
-            extra_args=None,
+            disable_version_check=False,
             **kwargs):
-    r'''
+    '''
     Install packages with pip
 
     Install packages individually or from a pip requirements file. Install
@@ -489,6 +483,11 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
         that the ``user:password@`` is optional and required only if you are
         behind an authenticated proxy. If you provide
         ``user@proxy.server:port`` then you will be prompted for a password.
+
+        .. note::
+            If the the Minion has a globaly configured proxy - it will be used
+            even if no proxy was set here. To explicitly disable proxy for pip
+            you should pass ``False`` as a value.
 
     timeout
         Set the socket timeout (default 15 seconds)
@@ -615,10 +614,6 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
     no_cache_dir
         Disable the cache.
 
-    user_install
-        Enable install to occur inside the user base's (site.USER_BASE) binary directory,
-        typically ~/.local/, or %APPDATA%\Python on Windows
-
     extra_args
         pip keyword and positional arguments not yet implemented in salt
 
@@ -636,6 +631,11 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
     .. code-block:: bash
 
         pip install pandas --latest-pip-kwarg param --latest-pip-arg
+
+    disable_version_check
+        Pip may periodically check PyPI to determine whether a new version of
+        pip is available to download. Passing True for this option disables
+        that check.
 
     CLI Example:
 
@@ -719,8 +719,16 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
 
         cmd.extend(['--log', log])
 
+    config = __opts__
     if proxy:
         cmd.extend(['--proxy', proxy])
+    # If proxy arg is set to False we won't use the global proxy even if it's set.
+    elif proxy is not False and config.get('proxy_host') and config.get('proxy_port'):
+        if config.get('proxy_username') and config.get('proxy_password'):
+            http_proxy_url = 'http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}'.format(**config)
+        else:
+            http_proxy_url = 'http://{proxy_host}:{proxy_port}'.format(**config)
+        cmd.extend(['--proxy', http_proxy_url])
 
     if timeout:
         try:
@@ -789,6 +797,9 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
                 )
             cmd.extend(['--mirrors', mirror])
 
+    if disable_version_check:
+        cmd.extend(['--disable-pip-version-check'])
+
     if build:
         cmd.extend(['--build', build])
 
@@ -805,9 +816,6 @@ def install(pkgs=None,  # pylint: disable=R0912,R0913,R0914
 
     if source:
         cmd.extend(['--source', source])
-
-    if user_install:
-        cmd.append('--user')
 
     if upgrade:
         cmd.append('--upgrade')
@@ -1003,6 +1011,11 @@ def uninstall(pkgs=None,
         behind an authenticated proxy.  If you provide
         ``user@proxy.server:port`` then you will be prompted for a password.
 
+        .. note::
+            If the the Minion has a globaly configured proxy - it will be used
+            even if no proxy was set here. To explicitly disable proxy for pip
+            you should pass ``False`` as a value.
+
     timeout
         Set the socket timeout (default 15 seconds)
 
@@ -1044,8 +1057,16 @@ def uninstall(pkgs=None,
 
         cmd.extend(['--log', log])
 
+    config = __opts__
     if proxy:
         cmd.extend(['--proxy', proxy])
+    # If proxy arg is set to False we won't use the global proxy even if it's set.
+    elif proxy is not False and config.get('proxy_host') and config.get('proxy_port'):
+        if config.get('proxy_username') and config.get('proxy_password'):
+            http_proxy_url = 'http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}'.format(**config)
+        else:
+            http_proxy_url = 'http://{proxy_host}:{proxy_port}'.format(**config)
+        cmd.extend(['--proxy', http_proxy_url])
 
     if timeout:
         try:
@@ -1099,9 +1120,8 @@ def freeze(bin_env=None,
            cwd=None,
            use_vt=False,
            env_vars=None,
-           user_install=False,
            **kwargs):
-    r'''
+    '''
     Return a list of installed packages either globally or in the specified
     virtualenv
 
@@ -1116,10 +1136,6 @@ def freeze(bin_env=None,
 
     cwd
         Directory from which to run pip
-
-    user_install
-        Enable output to show inside the user base's (site.USER_BASE) binary directory,
-        typically ~/.local/, or %APPDATA%\Python on Windows
 
     .. note::
         If the version of pip available is older than 8.0.3, the list will not
@@ -1147,9 +1163,6 @@ def freeze(bin_env=None,
     else:
         cmd.append('--all')
 
-    if user_install:
-        cmd.append('--user')
-
     cmd_kwargs = dict(runas=user, cwd=cwd, use_vt=use_vt, python_shell=False)
     if kwargs:
         cmd_kwargs.update(**kwargs)
@@ -1170,9 +1183,8 @@ def list_(prefix=None,
           user=None,
           cwd=None,
           env_vars=None,
-          user_install=False,
           **kwargs):
-    r'''
+    '''
     Filter list of installed apps from ``freeze`` and check to see if
     ``prefix`` exists in the list of packages installed.
 
@@ -1183,11 +1195,6 @@ def list_(prefix=None,
         this function even if they are installed. Unlike :py:func:`pip.freeze
         <salt.modules.pip.freeze>`, this function always reports the version of
         pip which is installed.
-
-
-    user_install
-        Enable output to show inside the user base's (site.USER_BASE) binary directory,
-        typically ~/.local/, or %APPDATA%\Python on Windows
 
     CLI Example:
 
@@ -1204,7 +1211,6 @@ def list_(prefix=None,
                        user=user,
                        cwd=cwd,
                        env_vars=env_vars,
-                       user_install=user_install,
                        **kwargs):
         if line.startswith('-f') or line.startswith('#'):
             # ignore -f line as it contains --find-links directory
@@ -1341,7 +1347,7 @@ def list_upgrades(bin_env=None,
             if match:
                 name, version_ = match.groups()
             else:
-                logger.error('Can\'t parse line \'%s\'', line)
+                logger.error('Can\'t parse line \'{0}\''.format(line))
                 continue
             packages[name] = version_
 

@@ -22,7 +22,7 @@ except ImportError:
 from tests.support.runtests import RUNTIME_VARS
 from tests.support.mixins import LoaderModuleMockMixin
 from tests.support.unit import TestCase, skipIf
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON, patch
+from tests.support.mock import patch
 from tests.support.helpers import patched_environ
 
 # Import salt libs
@@ -92,8 +92,6 @@ class GitfsConfigTestCase(TestCase, LoaderModuleMockMixin):
             'transport': 'zeromq',
             'gitfs_mountpoint': '',
             'gitfs_saltenv': [],
-            'gitfs_env_whitelist': [],
-            'gitfs_env_blacklist': [],
             'gitfs_saltenv_whitelist': [],
             'gitfs_saltenv_blacklist': [],
             'gitfs_user': '',
@@ -125,7 +123,6 @@ class GitfsConfigTestCase(TestCase, LoaderModuleMockMixin):
         # Clear the instance map so that we make sure to create a new instance
         # for this test class.
         _clear_instance_map()
-
         cls.tmp_repo_dir = os.path.join(RUNTIME_VARS.TMP, 'gitfs_root')
         if salt.utils.platform.is_windows():
             cls.tmp_repo_dir = cls.tmp_repo_dir.replace('\\', '/')
@@ -161,18 +158,18 @@ class GitfsConfigTestCase(TestCase, LoaderModuleMockMixin):
 
             gitfs_remotes:
 
-              - file://tmp/repo1:
+              - file://{0}tmp/repo1:
                 - saltenv:
                   - foo:
                     - ref: foo_branch
                     - root: foo_root
 
-              - file://tmp/repo2:
+              - file://{0}tmp/repo2:
                 - mountpoint: repo2
                 - saltenv:
                   - baz:
                     - mountpoint: abc
-        ''')
+        '''.format('/' if salt.utils.platform.is_windows() else ''))
         with patch.dict(gitfs.__opts__, salt.utils.yaml.safe_load(opts_override)):
             git_fs = salt.utils.gitfs.GitFS(
                 gitfs.__opts__,
@@ -317,6 +314,51 @@ class GitFSTestFuncs(object):
             # the envs list, but the branches should not.
             self.assertEqual(ret, ['base', 'foo'])
 
+    def test_saltenv_blacklist(self):
+        '''
+        test saltenv_blacklist
+        '''
+        opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
+            gitfs_saltenv_blacklist: base
+            '''))
+        with patch.dict(gitfs.__opts__, opts):
+            gitfs.update()
+            ret = gitfs.envs(ignore_cache=True)
+            assert 'base' not in ret
+            assert UNICODE_ENVNAME in ret
+            assert 'mytag' in ret
+
+    def test_saltenv_whitelist(self):
+        '''
+        test saltenv_whitelist
+        '''
+        opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
+            gitfs_saltenv_whitelist: base
+            '''))
+        with patch.dict(gitfs.__opts__, opts):
+            gitfs.update()
+            ret = gitfs.envs(ignore_cache=True)
+            assert 'base' in ret
+            assert UNICODE_ENVNAME not in ret
+            assert 'mytag' not in ret
+
+    def test_env_deprecated_opts(self):
+        '''
+        ensure deprecated options gitfs_env_whitelist
+        and gitfs_env_blacklist do not cause gitfs to
+        not load.
+        '''
+        opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
+            gitfs_env_whitelist: base
+            gitfs_env_blacklist: ''
+            '''))
+        with patch.dict(gitfs.__opts__, opts):
+            gitfs.update()
+            ret = gitfs.envs(ignore_cache=True)
+            assert 'base' in ret
+            assert UNICODE_ENVNAME in ret
+            assert 'mytag' in ret
+
     def test_disable_saltenv_mapping_global_with_mapping_defined_per_remote(self):
         '''
         Test the global gitfs_disable_saltenv_mapping config option, combined
@@ -326,7 +368,7 @@ class GitFSTestFuncs(object):
         opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
             gitfs_disable_saltenv_mapping: True
             gitfs_remotes:
-              - file://{0}:
+              - {0}:
                 - saltenv:
                   - bar:
                     - ref: somebranch
@@ -346,7 +388,7 @@ class GitFSTestFuncs(object):
         '''
         opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
             gitfs_remotes:
-              - file://{0}:
+              - {0}:
                 - disable_saltenv_mapping: True
 
             gitfs_saltenv:
@@ -368,7 +410,7 @@ class GitFSTestFuncs(object):
         '''
         opts = salt.utils.yaml.safe_load(textwrap.dedent('''\
             gitfs_remotes:
-              - file://{0}:
+              - {0}:
                 - disable_saltenv_mapping: True
                 - saltenv:
                   - world:
@@ -386,7 +428,6 @@ class GitFSTestBase(object):
 
     @classmethod
     def setUpClass(cls):
-
         cls.tmp_repo_dir = os.path.join(RUNTIME_VARS.TMP, 'gitfs_root')
         if salt.utils.platform.is_windows():
             cls.tmp_repo_dir = cls.tmp_repo_dir.replace('\\', '/')
@@ -397,12 +438,14 @@ class GitFSTestBase(object):
             shutil.rmtree(cls.tmp_repo_dir)
         except OSError as exc:
             if exc.errno == errno.EACCES:
-                log.error("Access error removeing file %s", cls.tmp_repo_dir)
+                log.error("Access error removing file %s", cls.tmp_repo_dir)
             elif exc.errno != errno.ENOENT:
                 raise
+
         shutil.copytree(
             salt.ext.six.text_type(RUNTIME_VARS.BASE_FILES),
-            salt.ext.six.text_type(cls.tmp_repo_dir + '/')
+            salt.ext.six.text_type(cls.tmp_repo_dir + '/'),
+            symlinks=True
         )
 
         repo = git.Repo.init(cls.tmp_repo_dir)
@@ -417,8 +460,8 @@ class GitFSTestBase(object):
                 'Unable to get effective username, falling back to \'root\'.'
             )
             username = str('root')
-        with patched_environ(USERNAME=username):
 
+        with patched_environ(USERNAME=username):
             repo.index.add([x for x in os.listdir(cls.tmp_repo_dir)
                             if x != '.git'])
             repo.index.commit('Test')
@@ -476,7 +519,6 @@ class GitFSTestBase(object):
 
 
 @skipIf(not HAS_GITPYTHON, 'GitPython >= {0} required'.format(GITPYTHON_MINVER))
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 class GitPythonTest(GitFSTestBase, GitFSTestFuncs, TestCase, LoaderModuleMockMixin):
 
     def setup_loader_modules(self):
@@ -490,8 +532,6 @@ class GitPythonTest(GitFSTestBase, GitFSTestFuncs, TestCase, LoaderModuleMockMix
             'transport': 'zeromq',
             'gitfs_mountpoint': '',
             'gitfs_saltenv': [],
-            'gitfs_env_whitelist': [],
-            'gitfs_env_blacklist': [],
             'gitfs_saltenv_whitelist': [],
             'gitfs_saltenv_blacklist': [],
             'gitfs_user': '',
@@ -522,7 +562,7 @@ class GitPythonTest(GitFSTestBase, GitFSTestFuncs, TestCase, LoaderModuleMockMix
 
 @skipIf(not HAS_GITPYTHON, 'GitPython >= {0} required for temp repo setup'.format(GITPYTHON_MINVER))
 @skipIf(not HAS_PYGIT2, 'pygit2 >= {0} and libgit2 >= {1} required'.format(PYGIT2_MINVER, LIBGIT2_MINVER))
-@skipIf(NO_MOCK, NO_MOCK_REASON)
+@skipIf(salt.utils.platform.is_windows(), 'Skip Pygit2 on windows, due to pygit2 access error on windows')
 class Pygit2Test(GitFSTestBase, GitFSTestFuncs, TestCase, LoaderModuleMockMixin):
 
     def setup_loader_modules(self):
@@ -536,8 +576,6 @@ class Pygit2Test(GitFSTestBase, GitFSTestFuncs, TestCase, LoaderModuleMockMixin)
             'transport': 'zeromq',
             'gitfs_mountpoint': '',
             'gitfs_saltenv': [],
-            'gitfs_env_whitelist': [],
-            'gitfs_env_blacklist': [],
             'gitfs_saltenv_whitelist': [],
             'gitfs_saltenv_blacklist': [],
             'gitfs_user': '',

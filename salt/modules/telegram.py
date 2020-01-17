@@ -123,7 +123,7 @@ def _post_message(message, chat_id, token):
 
         log.debug('Raw response of the telegram request is %s', response)
 
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         log.exception(
             'Sending telegram api request failed'
         )

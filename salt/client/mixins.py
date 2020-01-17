@@ -142,17 +142,15 @@ class SyncClientMixin(object):
         '''
         load = kwargs
         load['cmd'] = self.client
-        channel = salt.transport.client.ReqChannel.factory(self.opts,
-                                                           crypt='clear',
-                                                           usage='master_call')
-        try:
+
+        with salt.transport.client.ReqChannel.factory(self.opts,
+                                                      crypt='clear',
+                                                      usage='master_call') as channel:
             ret = channel.send(load)
-        finally:
-            channel.close()
-        if isinstance(ret, collections.Mapping):
-            if 'error' in ret:
-                salt.utils.error.raise_error(**ret['error'])
-        return ret
+            if isinstance(ret, collections.Mapping):
+                if 'error' in ret:
+                    salt.utils.error.raise_error(**ret['error'])
+            return ret
 
     def cmd_sync(self, low, timeout=None, full_return=False):
         '''
@@ -406,7 +404,7 @@ class SyncClientMixin(object):
                     if isinstance(data['return'], dict) and 'data' in data['return']:
                         # some functions can return boolean values
                         data['success'] = salt.utils.state.check_result(data['return']['data'])
-            except (Exception, SystemExit) as ex:
+            except (Exception, SystemExit) as ex:  # pylint: disable=broad-except
                 if isinstance(ex, salt.exceptions.NotImplemented):
                     data['return'] = six.text_type(ex)
                 else:
@@ -533,9 +531,9 @@ class AsyncClientMixin(object):
         to watch for the return
         '''
         async_pub = pub if pub is not None else self._gen_async_pub()
-
-        proc = salt.utils.process.SignalHandlingMultiprocessingProcess(
+        proc = salt.utils.process.SignalHandlingProcess(
                 target=self._proc_function,
+                name='ProcessFunc',
                 args=(fun, low, user, async_pub['tag'], async_pub['jid']))
         with salt.utils.process.default_signals(signal.SIGINT, signal.SIGTERM):
             # Reset current signals before starting the process in

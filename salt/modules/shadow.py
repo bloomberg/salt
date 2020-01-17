@@ -50,7 +50,7 @@ def default_hash():
     return '!'
 
 
-def info(name, root=None, **kwargs):
+def info(name, root=None):
     '''
     Return information for the specified user
 

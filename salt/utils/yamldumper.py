@@ -18,7 +18,6 @@ except ImportError:
 import yaml  # pylint: disable=blacklisted-import
 import collections
 import salt.utils.context
-import salt.utils.thread_local_proxy
 from salt.utils.odict import OrderedDict
 
 __all__ = ['OrderedDumper', 'SafeOrderedDumper', 'IndentedSafeOrderedDumper',
@@ -53,15 +52,19 @@ class IndentedSafeOrderedDumper(IndentMixin, SafeOrderedDumper):
     A YAML safe dumper that represents python OrderedDict as simple YAML map,
     and also indents lists by two spaces.
     '''
-    pass
 
 
 def represent_ordereddict(dumper, data):
     return dumper.represent_dict(list(data.items()))
 
 
+def represent_undefined(dumper, data):
+    return dumper.represent_scalar(u'tag:yaml.org,2002:null', u'NULL')
+
+
 OrderedDumper.add_representer(OrderedDict, represent_ordereddict)
 SafeOrderedDumper.add_representer(OrderedDict, represent_ordereddict)
+SafeOrderedDumper.add_representer(None, represent_undefined)
 
 OrderedDumper.add_representer(
     collections.defaultdict,
@@ -86,23 +89,6 @@ OrderedDumper.add_representer(
 SafeOrderedDumper.add_representer(
     'tag:yaml.org,2002:timestamp',
     SafeOrderedDumper.represent_scalar)
-
-
-# DO NOT MOVE THIS FUNCTION! It must be defined after the representers above
-# have been added, so that it has access to the manually-added representers
-# above when it looks for a representer for the proxy object's __class__.
-def represent_thread_local_proxy(dumper, data):
-    if data.__class__ in dumper.yaml_representers:
-        return dumper.yaml_representers[data.__class__](dumper, data)
-    return dumper.represent_undefined(data)
-
-
-OrderedDumper.add_representer(
-    salt.utils.thread_local_proxy.ThreadLocalProxy,
-    represent_thread_local_proxy)
-SafeOrderedDumper.add_representer(
-    salt.utils.thread_local_proxy.ThreadLocalProxy,
-    represent_thread_local_proxy)
 
 
 def get_dumper(dumper_name):

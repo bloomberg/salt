@@ -14,7 +14,7 @@ import time
 # Import Salt Testing libs
 from tests.support.runtests import RUNTIME_VARS
 from tests.support.case import ModuleCase
-from tests.support.helpers import with_tempdir, flaky
+from tests.support.helpers import with_tempdir
 from tests.support.unit import skipIf
 from tests.support.mixins import SaltReturnAssertsMixin
 
@@ -83,7 +83,6 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
                     fhw.write(line + ending)
 
         destpath = os.path.join(RUNTIME_VARS.BASE_FILES, 'testappend', 'firstif')
-        _reline(destpath)
         destpath = os.path.join(RUNTIME_VARS.BASE_FILES, 'testappend', 'secondif')
         _reline(destpath)
         cls.TIMEOUT = 600 if salt.utils.platform.is_windows() else 10
@@ -117,6 +116,22 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         states = self.run_function('state.show_states', sorted=False)
         self.assertTrue(isinstance(states, list))
         self.assertTrue(isinstance(states[0], six.string_types))
+
+    def test_show_states_missing_sls(self):
+        '''
+        Test state.show_states with a sls file
+        defined in a top file is missing
+        '''
+        topfile = os.path.join(RUNTIME_VARS.TMP_STATE_TREE, 'top.sls')
+        with salt.utils.files.fopen(topfile, 'w') as top_file:
+            top_file.write(textwrap.dedent('''\
+                                           base:
+                                             '*':
+                                               - doesnotexist
+                                           '''))
+        states = self.run_function('state.show_states')
+        assert isinstance(states, list)
+        assert states == ["No matching sls found for 'doesnotexist' in env 'base'"]
 
     def test_catch_recurse(self):
         '''
@@ -389,7 +404,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
             with salt.utils.files.fopen(testfile, 'r') as fp_:
                 contents = salt.utils.stringutils.to_unicode(fp_.read())
             self.assertMultiLineEqual(expected, contents)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             if os.path.exists(testfile):
                 shutil.copy(testfile, testfile + '.bak')
             raise
@@ -1014,81 +1029,6 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
             }
         }
         ret = self.run_function('state.sls', mods='requisites.onfail_any')
-        result = self.normalize_ret(ret)
-        self.assertReturnNonEmptySaltType(ret)
-        self.assertEqual(expected_result, result)
-
-    def test_requisites_onfail_all(self):
-        '''
-        Call sls file containing several onfail-all
-
-        Ensure that some of them are failing and that the order is right.
-        '''
-        expected_result = {
-            'cmd_|-a_|-exit 0_|-run': {
-                '__run_num__': 0,
-                'changes': True,
-                'comment': 'Command "exit 0" run',
-                'result': True
-            },
-            'cmd_|-b_|-exit 0_|-run': {
-                '__run_num__': 1,
-                'changes': True,
-                'comment': 'Command "exit 0" run',
-                'result': True
-            },
-            'cmd_|-c_|-exit 0_|-run': {
-                '__run_num__': 2,
-                'changes': True,
-                'comment': 'Command "exit 0" run',
-                'result': True
-            },
-            'cmd_|-d_|-exit 1_|-run': {
-                '__run_num__': 3,
-                'changes': True,
-                'comment': 'Command "exit 1" run',
-                'result': False
-            },
-            'cmd_|-e_|-exit 1_|-run': {
-                '__run_num__': 4,
-                'changes': True,
-                'comment': 'Command "exit 1" run',
-                'result': False
-            },
-            'cmd_|-f_|-exit 1_|-run': {
-                '__run_num__': 5,
-                'changes': True,
-                'comment': 'Command "exit 1" run',
-                'result': False
-            },
-            'cmd_|-reqs also met_|-echo itonfailed_|-run': {
-                '__run_num__': 9,
-                'changes': True,
-                'comment': 'Command "echo itonfailed" run',
-                'result': True
-            },
-            'cmd_|-reqs also not met_|-echo italsodidnonfail_|-run': {
-                '__run_num__': 7,
-                'changes': False,
-                'comment':
-                'State was not run because onfail req did not change',
-                'result': True
-            },
-            'cmd_|-reqs met_|-echo itonfailed_|-run': {
-                '__run_num__': 8,
-                'changes': True,
-                'comment': 'Command "echo itonfailed" run',
-                'result': True
-            },
-            'cmd_|-reqs not met_|-echo itdidntonfail_|-run': {
-                '__run_num__': 6,
-                'changes': False,
-                'comment':
-                'State was not run because onfail req did not change',
-                'result': True
-            }
-        }
-        ret = self.run_function('state.sls', mods='requisites.onfail_all')
         result = self.normalize_ret(ret)
         self.assertReturnNonEmptySaltType(ret)
         self.assertEqual(expected_result, result)
@@ -1778,12 +1718,6 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         stdout = state_run['cmd_|-d_|-echo d_|-run']['changes']['stdout']
         self.assertEqual(stdout, 'd')
 
-        comment = state_run['cmd_|-e_|-echo e_|-run']['comment']
-        self.assertEqual(comment, 'State was not run because onfail req did not change')
-
-        stdout = state_run['cmd_|-f_|-echo f_|-run']['changes']['stdout']
-        self.assertEqual(stdout, 'f')
-
     def test_multiple_onfail_requisite_with_required_no_run(self):
         '''
         test to ensure multiple states are not run
@@ -1968,7 +1902,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         '''
         test a state with the retry option that should return True immedietly (i.e. no retries)
         '''
-        testfile = os.path.join(RUNTIME_VARS.TMP, 'retry_file')
+        testfile = os.path.join(RUNTIME_VARS.TMP, 'retry_file_option_success')
         state_run = self.run_function(
             'state.sls',
             mods='retry.retry_success'
@@ -1977,29 +1911,35 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         retry_state = 'file_|-file_test_|-{0}_|-exists'.format(testfile)
         self.assertNotIn('Attempt', state_run[retry_state]['comment'])
 
-    def run_create(self):
+    def run_create(self, testfile):
         '''
         helper function to wait 30 seconds and then create the temp retry file
         '''
-        testfile = os.path.join(RUNTIME_VARS.TMP, 'retry_file')
+        # Wait for the requisite stae 'file_test_a' to complete before creating
+        # test_file
+        while True:
+            if os.path.exists(testfile + '_a'):
+                break
+            time.sleep(1)
         time.sleep(30)
         with salt.utils.files.fopen(testfile, 'a'):
             pass
 
-    @flaky
     def test_retry_option_eventual_success(self):
         '''
         test a state with the retry option that should return True after at least 4 retry attmempt
         but never run 15 attempts
         '''
-        testfile = os.path.join(RUNTIME_VARS.TMP, 'retry_file')
-        create_thread = threading.Thread(target=self.run_create)
+        testfile = os.path.join(RUNTIME_VARS.TMP, 'retry_file_eventual_success')
+        assert not os.path.exists(testfile + '_a')
+        assert not os.path.exists(testfile)
+        create_thread = threading.Thread(target=self.run_create, args=(testfile,))
         create_thread.start()
         state_run = self.run_function(
             'state.sls',
             mods='retry.retry_success2'
         )
-        retry_state = 'file_|-file_test_|-{0}_|-exists'.format(testfile)
+        retry_state = 'file_|-file_test_b_|-{0}_|-exists'.format(testfile)
         self.assertIn('Attempt 1:', state_run[retry_state]['comment'])
         self.assertIn('Attempt 2:', state_run[retry_state]['comment'])
         self.assertIn('Attempt 3:', state_run[retry_state]['comment'])
@@ -2083,6 +2023,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
                 pass
 
     @skipIf(sys.platform.startswith('win'), 'Skipped until parallel states can be fixed on Windows')
+    @skipIf(salt.utils.platform.is_darwin() and six.PY2, 'This test hangs on OS X on Py2')
     def test_parallel_state_with_long_tag(self):
         '''
         This tests the case where the state being executed has a long ID dec or
@@ -2211,6 +2152,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
                              'File {0} updated'.format(file_name))
             self.assertEqual(val['changes']['diff'], 'New file')
 
+    @skipIf(six.PY3 and salt.utils.platform.is_darwin(), 'Test is broken on macosx and PY3')
     def test_issue_30161_unless_and_onlyif_together(self):
         '''
         test cmd.run using multiple unless options where the first cmd in the
@@ -2232,6 +2174,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
                       'result': True},
                      'file_|-unless_false_onlyif_true_|-{0}{1}test.txt_|-managed'.format(RUNTIME_VARS.TMP, os.path.sep):
                      {'comment': 'Empty file',
+                      'pchanges': {},
                       'name': '{0}{1}test.txt'.format(RUNTIME_VARS.TMP, os.path.sep),
                       'start_time': '18:10:20.341753',
                       'result': True,
@@ -2269,7 +2212,7 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         test the output from running and echo command with non-ascii
         characters.
         '''
-        ret = self.run_function('state.sls', ['issue-46672-a'])
+        ret = self.run_function('state.sls', ['issue-46672-a'], timeout=60)
         key = list(ret.keys())[0]
         log.debug('== ret %s ==', type(ret))
         _expected = 'This is Æ test!'
@@ -2282,25 +2225,20 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         self.assertEqual(_expected, ret[key]['changes']['stdout'])
 
     def tearDown(self):
-        nonbase_file = os.path.join(RUNTIME_VARS.TMP, 'nonbase_env')
-        if os.path.isfile(nonbase_file):
-            os.remove(nonbase_file)
+        rm_files = [os.path.join(RUNTIME_VARS.TMP, 'nonbase_env'),
+                    os.path.join(RUNTIME_VARS.TMP, 'testfile'),
+                    os.path.join(RUNTIME_VARS.TMP, 'test.txt'),
+                    os.path.join(RUNTIME_VARS.TMP_STATE_TREE, 'top.sls')]
+
+        for file_ in rm_files:
+            if os.path.isfile(file_):
+                os.remove(file_)
 
         # remove old pillar data
         for filename in os.listdir(RUNTIME_VARS.TMP_PILLAR_TREE):
             os.remove(os.path.join(RUNTIME_VARS.TMP_PILLAR_TREE, filename))
         self.run_function('saltutil.refresh_pillar')
         self.run_function('test.sleep', [5])
-
-        # remove testfile added in core.sls state file
-        state_file = os.path.join(RUNTIME_VARS.TMP, 'testfile')
-        if os.path.isfile(state_file):
-            os.remove(state_file)
-
-        # remove testfile added in issue-30161.sls state file
-        state_file = os.path.join(RUNTIME_VARS.TMP, 'test.txt')
-        if os.path.isfile(state_file):
-            os.remove(state_file)
 
     def test_state_sls_integer_name(self):
         '''

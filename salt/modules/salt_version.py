@@ -2,14 +2,14 @@
 '''
 Access Salt's elemental release code-names.
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 
 Salt's feature release schedule is based on the Periodic Table, as described
 in the :ref:`Version Numbers <version-numbers>` documentation.
 
-Since deprecation notices often use the elemental release code-name when warning
-users about deprecated changes, it can be difficult to build out future-proof
-functionality that are dependent on a naming scheme that moves.
+When a feature was added (or removed) in a specific release, it can be
+difficult to build out future-proof functionality that is dependent on
+a naming scheme that moves.
 
 For example, a state syntax needs to change to support an option that will be
 removed in the future, but there are many Minion versions in use across an
@@ -21,7 +21,7 @@ A simple example might be something like the following:
 .. code-block:: jinja
 
     {# a boolean check #}
-    {% set option_deprecated = salt['salt_version.is_older']("Sodium") %}
+    {% set option_deprecated = salt['salt_version.less_than']("Sodium") %}
 
     {% if option_deprecated %}
       <use old syntax>
@@ -56,14 +56,14 @@ def __virtual__():
 def get_release_number(name):
     '''
     Returns the release number of a given release code name in a
-    ``<year>.<month>`` context.
+    ``MAJOR.PATCH`` format.
 
     If the release name has not been given an assigned release number, the
     function returns a string. If the release cannot be found, it returns
     ``None``.
 
     name
-        The release codename for which to find a release number.
+        The release code name for which to find a release number.
 
     CLI Example:
 
@@ -75,74 +75,81 @@ def get_release_number(name):
     version_map = salt.version.SaltStackVersion.LNAMES
     version = version_map.get(name)
     if version is None:
-        log.info('Version %s not found.', name)
+        log.info('Version {} not found.'.format(name))
         return None
 
     if version[1] == 0:
-        log.info('Version %s found, but no release number has been assigned yet.', name)
+        log.info('Version {} found, but no release number has been assigned '
+                 'yet.'.format(name))
         return 'No version assigned.'
 
     return '.'.join(str(item) for item in version)
 
 
-def is_equal(name):
+def equal(name):
     '''
-    Returns a boolean if the named version matches the minion's current Salt
-    version.
+    Returns a boolean (True) if the minion's current version
+    code name matches the named version.
 
     name
-        The release codename to check the version against.
+        The release code name to check the version against.
 
     CLI Example:
 
     .. code-block:: bash
 
-        salt '*' salt_version.is_equal 'Oxygen'
+        salt '*' salt_version.equal 'Oxygen'
     '''
     if _check_release_cmp(name) == 0:
-        log.info('Release codename \'%s\' equals the minion\'s version.', name)
+        log.info(
+            'The minion\'s version code name matches \'{}\'.'.format(name)
+        )
         return True
 
     return False
 
 
-def is_newer(name):
+def greater_than(name):
     '''
-    Returns a boolean if the named version is newer that the minion's current
-    Salt version.
+    Returns a boolean (True) if the minion's current
+    version code name is greater than the named version.
 
     name
-        The release codename to check the version against.
+        The release code name to check the version against.
 
     CLI Example:
 
     .. code-block:: bash
 
-        salt '*' salt_version.is_newer 'Sodium'
+        salt '*' salt_version.greater_than 'Sodium'
     '''
     if _check_release_cmp(name) == 1:
-        log.info('Release codename \'%s\' is newer than the minion\'s version.', name)
+        log.info(
+            'The minion\'s version code name is greater than \'{}\'.'.format(name)
+        )
         return True
 
     return False
 
 
-def is_older(name):
+def less_than(name):
     '''
-    Returns a boolean if the named version is older that the minion's current
-    Salt version.
+    Returns a boolean (True) if the minion's current
+    version code name is less than the named version.
 
     name
-        The release codename to check the version against.
+        The release code name to check the version against.
 
     CLI Example:
 
     .. code-block:: bash
 
-        salt '*' salt_version.is_newer 'Sodium'
+        salt '*' salt_version.less_than 'Sodium'
     '''
     if _check_release_cmp(name) == -1:
-        log.info('Release codename \'%s\' is older than the minion\'s version.', name)
+        log.info(
+            'The minion\'s version code name is less than \'{}\'.'.format(name)
+        )
         return True
 
     return False
@@ -150,21 +157,20 @@ def is_older(name):
 
 def _check_release_cmp(name):
     '''
-    Helper function to compare release codename versions to the minion's current
-    Salt version.
+    Helper function to compare the minion's current
+    Salt version to release code name versions.
 
-    If release codename isn't found, the function returns None. Otherwise, it
+    If release code name isn't found, the function returns None. Otherwise, it
     returns the results of the version comparison as documented by the
     ``versions_cmp`` function in ``salt.utils.versions.py``.
     '''
     map_version = get_release_number(name)
     if map_version is None:
-        log.info('Release codename %s was not found.', name)
+        log.info('Release code name {} was not found.'.format(name))
         return None
 
     current_version = six.text_type(salt.version.SaltStackVersion(
         *salt.version.__version_info__))
     current_version = current_version.rsplit('.', 1)[0]
-    version_cmp = salt.utils.versions.version_cmp(map_version, current_version)
-
+    version_cmp = salt.utils.versions.version_cmp(current_version, map_version)
     return version_cmp

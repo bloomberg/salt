@@ -78,7 +78,7 @@ def setval(key, val, false_unsets=False, permanent=False):
                     __utils__['reg.delete_value'](permanent_hive, permanent_key, key)
                     __utils__['win_functions.broadcast_setting_change']()
                 return None
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 log.error(
                     '%s: Exception occurred when unsetting '
                     'environ key \'%s\': \'%s\'', __name__, key, exc
@@ -93,7 +93,7 @@ def setval(key, val, false_unsets=False, permanent=False):
                 __utils__['reg.set_value'](permanent_hive, permanent_key, key, val)
                 __utils__['win_functions.broadcast_setting_change']()
             return os.environ[key]
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error(
                 '%s: Exception occurred when setting'
                 'environ key \'%s\': \'%s\'', __name__, key, exc

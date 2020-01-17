@@ -55,7 +55,6 @@ try:
 except ImportError:
     markupsafe = None
 
-# pylint: enable=import-error,no-name-in-module
 
 try:
     # Older python where the backport from pypi is installed
@@ -66,6 +65,7 @@ except ImportError:
         from salt.ext import ssl_match_hostname
     except ImportError:
         ssl_match_hostname = None
+# pylint: enable=import-error,no-name-in-module
 
 # Import salt libs
 import salt
@@ -392,7 +392,9 @@ def gen_thin(cachedir, extra_mods='', overwrite=False, so_mods='',
                 log.error('Error while removing %s file: %s', thintar, exc)
                 if os.path.exists(thintar):
                     raise salt.exceptions.SaltSystemExit(
-                        'Unable to remove {0}. See logs for details.'.format(thintar)
+                        'Unable to remove {} file. See logs for details.'.format(
+                            thintar
+                        )
                     )
         else:
             return thintar
@@ -791,7 +793,7 @@ def gen_min(cachedir, extra_mods='', overwrite=False, so_mods='',
         'salt/minion.py',
         'salt/pillar',
         'salt/pillar/__init__.py',
-        'salt/textformat.py',
+        'salt/utils/textformat.py',
         'salt/log',
         'salt/log/__init__.py',
         'salt/log/handlers',

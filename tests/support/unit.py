@@ -33,7 +33,7 @@ from unittest import (
     expectedFailure,
     TestSuite as _TestSuite,
     skip,
-    skipIf,
+    skipIf as _skipIf,
     TestResult,
     TextTestResult as _TextTestResult
 )
@@ -74,11 +74,10 @@ class TestSuite(_TestSuite):
 
         # Store a reference to all class attributes before running the setUpClass method
         initial_class_attributes = dir(test.__class__)
-        ret = super(TestSuite, self)._handleClassSetUp(test, result)
+        super(TestSuite, self)._handleClassSetUp(test, result)
         # Store the difference in in a variable in order to check later if they were deleted
         test.__class__._prerun_class_attributes = [
                 attr for attr in dir(test.__class__) if attr not in initial_class_attributes]
-        return ret
 
     def _tearDownPreviousClass(self, test, result):
         # Run any tearDownClass code defined
@@ -174,7 +173,7 @@ class TestCase(_TestCase):
                     for proc in psutil.process_iter():
                         if proc.status == psutil.STATUS_ZOMBIE:
                             found_zombies += 1
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     pass
                 proc_info += '|Z:{0}'.format(found_zombies)
             proc_info += '] {short_desc}'.format(short_desc=desc if desc else '')
@@ -301,7 +300,7 @@ class TestCase(_TestCase):
                 )
             )
 
-        def assertRegex(self, text, regex, msg=None):
+        def assertRegex(self, text, regex, msg=None):  # pylint: disable=arguments-differ
             # In python 2, alias to the future python 3 function
             return _TestCase.assertRegexpMatches(self, text, regex, msg=msg)
 
@@ -314,7 +313,7 @@ class TestCase(_TestCase):
                 )
             )
 
-        def assertNotRegex(self, text, regex, msg=None):
+        def assertNotRegex(self, text, regex, msg=None):  # pylint: disable=arguments-differ
             # In python 2, alias to the future python 3 function
             return _TestCase.assertNotRegexpMatches(self, text, regex, msg=msg)
 
@@ -327,7 +326,7 @@ class TestCase(_TestCase):
                 )
             )
 
-        def assertRaisesRegex(self, exception, regexp, *args, **kwds):
+        def assertRaisesRegex(self, exception, regexp, *args, **kwds):  # pylint: disable=arguments-differ
             # In python 2, alias to the future python 3 function
             return _TestCase.assertRaisesRegexp(self, exception, regexp, *args, **kwds)
     else:
@@ -365,11 +364,11 @@ class TextTestResult(_TextTestResult):
     '''
 
     def startTest(self, test):
-        log.debug('>>>>> START >>>>> %s', test.id())
+        log.debug('>>>>> START >>>>> {0}'.format(test.id()))
         return super(TextTestResult, self).startTest(test)
 
     def stopTest(self, test):
-        log.debug('<<<<< END <<<<<<< %s', test.id())
+        log.debug('<<<<< END <<<<<<< {0}'.format(test.id()))
         return super(TextTestResult, self).stopTest(test)
 
 
@@ -378,6 +377,14 @@ class TextTestRunner(_TextTestRunner):
     Custom Text tests runner to log the start and the end of a test case
     '''
     resultclass = TextTestResult
+
+
+def skipIf(skip, reason):
+    from tests.support.runtests import RUNTIME_VARS
+    if RUNTIME_VARS.PYTEST_SESSION:
+        import pytest
+        return pytest.mark.skipif(skip, reason=reason)
+    return _skipIf(skip, reason)
 
 
 __all__ = [

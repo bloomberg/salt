@@ -90,7 +90,7 @@ def _gather_buffer_space():
         # We need to load up ``mem_total`` grain. Let's mimic required OS data.
         os_data = {'kernel': platform.system()}
         grains = salt.grains.core._memdata(os_data)
-        total_mem = grains['mem_total'] * 1024 * 1024
+        total_mem = grains['mem_total']
     # Return the higher number between 5% of the system memory and 10MiB
     return max([total_mem * 0.05, 10 << 20])
 
@@ -140,9 +140,6 @@ VALID_OPTS = immutabletypes.freeze({
     # When in multi-master mode, temporarily remove a master from the list if a conenction
     # is interrupted and try another master in the list.
     'master_alive_interval': int,
-
-    # The strategy to use when returning results back to the master.
-    'master_return_strategy': six.string_types,
 
     # When in multi-master failover mode, fail back to the first master in the list if it's back
     # online.
@@ -362,10 +359,6 @@ VALID_OPTS = immutabletypes.freeze({
     # Maximum number of concurrently active processes at any given point in time
     'process_count_max': int,
 
-    # If the minion reaches process_count_max, how long should it sleep
-    # before trying to generate a new process.
-    'process_count_max_sleep_secs': int,
-
     # Whether or not the salt minion should run scheduled mine updates
     'mine_enabled': bool,
 
@@ -463,9 +456,6 @@ VALID_OPTS = immutabletypes.freeze({
     # Tell the client to display the jid when a job is published
     'show_jid': bool,
 
-    # Generate jids based on UTC time instead of local time
-    'utc_jid': bool,
-
     # Ensure that a generated jid is always unique. If this is set, the jid
     # format is different due to an underscore and process id being appended
     # to the jid. WARNING: A change to the jid format may break external
@@ -557,6 +547,11 @@ VALID_OPTS = immutabletypes.freeze({
     # returner specified by 'event_return'
     'event_return_queue': int,
 
+    # The number of seconds that events can languish in the queue before we flush them.
+    # The goal here is to ensure that if the bus is not busy enough to reach a total
+    # `event_return_queue` events won't get stale.
+    'event_return_queue_max_seconds': int,
+
     # Only forward events to an event returner if it matches one of the tags in this list
     'event_return_whitelist': list,
 
@@ -605,15 +600,6 @@ VALID_OPTS = immutabletypes.freeze({
     # IPC buffer size
     # Refs https://github.com/saltstack/salt/issues/34215
     'ipc_write_buffer': int,
-
-    # IPC tcp socket max send buffer
-    'ipc_so_sndbuf': (type(None), int),
-
-    # IPC tcp socket max receive buffer
-    'ipc_so_rcvbuf': (type(None), int),
-
-    # IPC tcp socket backlog size
-    'ipc_so_backlog': (type(None), int),
 
     # The number of MWorker processes for a master to startup. This number needs to scale up as
     # the number of connected minions increases.
@@ -673,6 +659,7 @@ VALID_OPTS = immutabletypes.freeze({
     'roots_update_interval': int,
     'azurefs_update_interval': int,
     'gitfs_update_interval': int,
+    'git_pillar_update_interval': int,
     'hgfs_update_interval': int,
     'minionfs_update_interval': int,
     's3fs_update_interval': int,
@@ -703,8 +690,6 @@ VALID_OPTS = immutabletypes.freeze({
     'gitfs_privkey': six.string_types,
     'gitfs_pubkey': six.string_types,
     'gitfs_passphrase': six.string_types,
-    'gitfs_env_whitelist': list,
-    'gitfs_env_blacklist': list,
     'gitfs_saltenv_whitelist': list,
     'gitfs_saltenv_blacklist': list,
     'gitfs_ssl_verify': bool,
@@ -718,8 +703,6 @@ VALID_OPTS = immutabletypes.freeze({
     'hgfs_root': six.string_types,
     'hgfs_base': six.string_types,
     'hgfs_branch_method': six.string_types,
-    'hgfs_env_whitelist': list,
-    'hgfs_env_blacklist': list,
     'hgfs_saltenv_whitelist': list,
     'hgfs_saltenv_blacklist': list,
     'svnfs_remotes': list,
@@ -728,8 +711,6 @@ VALID_OPTS = immutabletypes.freeze({
     'svnfs_trunk': six.string_types,
     'svnfs_branches': six.string_types,
     'svnfs_tags': six.string_types,
-    'svnfs_env_whitelist': list,
-    'svnfs_env_blacklist': list,
     'svnfs_saltenv_whitelist': list,
     'svnfs_saltenv_blacklist': list,
     'minionfs_env': six.string_types,
@@ -1094,9 +1075,6 @@ VALID_OPTS = immutabletypes.freeze({
     # Useful when a returner is the source of truth for a job result
     'pub_ret': bool,
 
-    # HTTP request settings. Used in tornado fetch functions
-    'user_agent': six.string_types,
-
     # HTTP proxy settings. Used in tornado fetch functions, apt-key etc
     'proxy_host': six.string_types,
     'proxy_username': six.string_types,
@@ -1186,9 +1164,6 @@ VALID_OPTS = immutabletypes.freeze({
     # Subconfig entries can be specified by using the ':' notation (e.g. key:subkey)
     'pass_to_ext_pillars': (six.string_types, list),
 
-    # Used by salt.modules.dockermod.compare_container_networks to specify which keys are compared
-    'docker.compare_container_networks': dict,
-
     # SSDP discovery publisher description.
     # Contains publisher configuration and minion mapping.
     # Setting it to False disables discovery
@@ -1212,12 +1187,9 @@ VALID_OPTS = immutabletypes.freeze({
     # Thorium top file location
     'thorium_top': six.string_types,
 
-    # Use Adler32 hashing algorithm for server_id (default False until Sodium, "adler32" after)
-    # Possible values are: False, adler32, crc32
-    'server_id_use_crc': (bool, six.string_types),
-
-    # Disable requisites during State runs
-    'disabled_requisites': (six.string_types, list),
+    # Allow raw_shell option when using the ssh
+    # client via the Salt API
+    'netapi_allow_raw_shell': bool,
 })
 
 # default configurations
@@ -1234,7 +1206,6 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'master_finger': '',
     'master_shuffle': False,
     'master_alive_interval': 0,
-    'master_return_strategy': 'source',
     'master_failback': False,
     'master_failback_interval': 0,
     'verify_master_pubkey_sign': False,
@@ -1282,6 +1253,7 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'state_top_saltenv': None,
     'startup_states': '',
     'sls_list': [],
+    'start_event_grains': [],
     'top_file': '',
     'thoriumenv': None,
     'thorium_top': 'top.sls',
@@ -1321,6 +1293,7 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'roots_update_interval': DEFAULT_INTERVAL,
     'azurefs_update_interval': DEFAULT_INTERVAL,
     'gitfs_update_interval': DEFAULT_INTERVAL,
+    'git_pillar_update_interval': DEFAULT_INTERVAL,
     'hgfs_update_interval': DEFAULT_INTERVAL,
     'minionfs_update_interval': DEFAULT_INTERVAL,
     's3fs_update_interval': DEFAULT_INTERVAL,
@@ -1350,8 +1323,6 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'gitfs_privkey': '',
     'gitfs_pubkey': '',
     'gitfs_passphrase': '',
-    'gitfs_env_whitelist': [],
-    'gitfs_env_blacklist': [],
     'gitfs_saltenv_whitelist': [],
     'gitfs_saltenv_blacklist': [],
     'gitfs_global_lock': True,
@@ -1382,15 +1353,11 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'autosign_timeout': 120,
     'multiprocessing': True,
     'process_count_max': -1,
-    'process_count_max_sleep_secs': 10,
     'mine_enabled': True,
     'mine_return_job': False,
     'mine_interval': 60,
     'ipc_mode': _DFLT_IPC_MODE,
     'ipc_write_buffer': _DFLT_IPC_WBUFFER,
-    'ipc_so_rcvbuf': None,
-    'ipc_so_sndbuf': None,
-    'ipc_so_backlog': 128,
     'ipv6': None,
     'file_buffer_size': 262144,
     'tcp_pub_port': 4510,
@@ -1497,7 +1464,6 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'event_match_type': 'startswith',
     'minion_restart_command': [],
     'pub_ret': True,
-    'user_agent': '',
     'proxy_host': '',
     'proxy_username': '',
     'proxy_password': '',
@@ -1512,16 +1478,9 @@ DEFAULT_MINION_OPTS = immutabletypes.freeze({
     'extmod_whitelist': {},
     'extmod_blacklist': {},
     'minion_sign_messages': False,
-    'docker.compare_container_networks': {
-        'static': ['Aliases', 'Links', 'IPAMConfig'],
-        'automatic': ['IPAddress', 'Gateway',
-                      'GlobalIPv6Address', 'IPv6Gateway'],
-    },
     'discovery': False,
     'schedule': {},
-    'ssh_merge_pillar': True,
-    'server_id_use_crc': False,
-    'disabled_requisites': [],
+    'ssh_merge_pillar': True
 })
 
 DEFAULT_MASTER_OPTS = immutabletypes.freeze({
@@ -1577,6 +1536,7 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'roots_update_interval': DEFAULT_INTERVAL,
     'azurefs_update_interval': DEFAULT_INTERVAL,
     'gitfs_update_interval': DEFAULT_INTERVAL,
+    'git_pillar_update_interval': DEFAULT_INTERVAL,
     'hgfs_update_interval': DEFAULT_INTERVAL,
     'minionfs_update_interval': DEFAULT_INTERVAL,
     's3fs_update_interval': DEFAULT_INTERVAL,
@@ -1607,8 +1567,6 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'gitfs_privkey': '',
     'gitfs_pubkey': '',
     'gitfs_passphrase': '',
-    'gitfs_env_whitelist': [],
-    'gitfs_env_blacklist': [],
     'gitfs_saltenv_whitelist': [],
     'gitfs_saltenv_blacklist': [],
     'gitfs_global_lock': True,
@@ -1622,8 +1580,6 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'hgfs_root': '',
     'hgfs_base': 'default',
     'hgfs_branch_method': 'branches',
-    'hgfs_env_whitelist': [],
-    'hgfs_env_blacklist': [],
     'hgfs_saltenv_whitelist': [],
     'hgfs_saltenv_blacklist': [],
     'show_timeout': True,
@@ -1635,8 +1591,6 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'svnfs_trunk': 'trunk',
     'svnfs_branches': 'branches',
     'svnfs_tags': 'tags',
-    'svnfs_env_whitelist': [],
-    'svnfs_env_blacklist': [],
     'svnfs_saltenv_whitelist': [],
     'svnfs_saltenv_blacklist': [],
     'max_event_size': 1048576,
@@ -1713,9 +1667,6 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'enforce_mine_cache': False,
     'ipc_mode': _DFLT_IPC_MODE,
     'ipc_write_buffer': _DFLT_IPC_WBUFFER,
-    'ipc_so_rcvbuf': None,
-    'ipc_so_sndbuf': None,
-    'ipc_so_backlog': 128,
     'ipv6': None,
     'tcp_master_pub_port': 4512,
     'tcp_master_pull_port': 4513,
@@ -1852,6 +1803,7 @@ DEFAULT_MASTER_OPTS = immutabletypes.freeze({
     'auth_events': True,
     'minion_data_cache_events': True,
     'enable_ssh_minions': False,
+    'netapi_allow_raw_shell': False,
 })
 
 
@@ -2008,7 +1960,7 @@ def _expand_glob_path(file_roots):
                 unglobbed_path.extend(glob.glob(path))
             else:
                 unglobbed_path.append(path)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             unglobbed_path.append(path)
     return unglobbed_path
 
@@ -2586,7 +2538,7 @@ def apply_sdb(opts, sdb_opts=None):
 
 
 # ----- Salt Cloud Configuration Functions ---------------------------------->
-def cloud_config(path=None, env_var='SALT_CLOUD_CONFIG', defaults=None,
+def cloud_config(path, env_var='SALT_CLOUD_CONFIG', defaults=None,
                  master_config_path=None, master_config=None,
                  providers_config_path=None, providers_config=None,
                  profiles_config_path=None, profiles_config=None):
@@ -2614,11 +2566,11 @@ def cloud_config(path=None, env_var='SALT_CLOUD_CONFIG', defaults=None,
 
     # Load cloud configuration from any default or provided includes
     overrides.update(
-        salt.config.include_config(overrides['default_include'], config_dir, verbose=False)
+        salt.config.include_config(overrides['default_include'], path, verbose=False)
     )
     include = overrides.get('include', [])
     overrides.update(
-        salt.config.include_config(include, config_dir, verbose=True)
+        salt.config.include_config(include, path, verbose=True)
     )
 
     # The includes have been evaluated, let's see if master, providers and
@@ -2673,7 +2625,7 @@ def cloud_config(path=None, env_var='SALT_CLOUD_CONFIG', defaults=None,
         if not os.path.isabs(entry):
             # Let's try adding the provided path's directory name turns the
             # entry into a proper directory
-            entry = os.path.join(config_dir, entry)
+            entry = os.path.join(os.path.dirname(path), entry)
 
         if os.path.isdir(entry):
             # Path exists, let's update the entry (its path might have been
@@ -3857,6 +3809,8 @@ def apply_minion_config(overrides=None,
 
     if overrides.get('ipc_write_buffer', '') == 'dynamic':
         opts['ipc_write_buffer'] = _DFLT_IPC_WBUFFER
+    if 'ipc_write_buffer' not in overrides:
+        opts['ipc_write_buffer'] = 0
 
     # Make sure hash_type is lowercase
     opts['hash_type'] = opts['hash_type'].lower()
@@ -3878,7 +3832,7 @@ def _update_discovery_config(opts):
     if opts.get('discovery') not in (None, False):
         if opts['discovery'] is True:
             opts['discovery'] = {}
-        discovery_config = {'attempts': 3, 'pause': 5, 'port': 4520, 'match': 'any', 'mapping': {}, 'multimaster': False}
+        discovery_config = {'attempts': 3, 'pause': 5, 'port': 4520, 'match': 'any', 'mapping': {}}
         for key in opts['discovery']:
             if key not in discovery_config:
                 raise salt.exceptions.SaltConfigurationError('Unknown discovery option: {0}'.format(key))
@@ -4006,7 +3960,8 @@ def apply_master_config(overrides=None, defaults=None):
 
     if overrides.get('ipc_write_buffer', '') == 'dynamic':
         opts['ipc_write_buffer'] = _DFLT_IPC_WBUFFER
-
+    if 'ipc_write_buffer' not in overrides:
+        opts['ipc_write_buffer'] = 0
     using_ip_for_id = False
     append_master = False
     if not opts.get('id'):
@@ -4061,7 +4016,7 @@ def apply_master_config(overrides=None, defaults=None):
                 # serialization)
                 re.compile(regex)
                 opts['file_ignore_regex'].append(regex)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 log.warning(
                     'Unable to parse file_ignore_regex. Skipping: %s',
                     regex

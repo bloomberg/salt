@@ -71,7 +71,7 @@ def communicator(func):
             queue.put('KEYBOARDINT')
             queue.put('Keyboard interrupt')
             queue.put('{0}\n{1}\n'.format(ex, trace))
-        except Exception as ex:
+        except Exception as ex:  # pylint: disable=broad-except
             trace = traceback.format_exc()
             queue.put('ERROR')
             queue.put('Exception')
@@ -644,7 +644,7 @@ class Cloud(object):
                         __active_provider_name__=':'.join([alias, driver])
                     ):
                         pmap[alias][driver] = self.clouds[fun]()
-                except Exception as err:
+                except Exception as err:  # pylint: disable=broad-except
                     log.debug(
                         'Failed to execute \'%s()\' while querying for '
                         'running nodes: %s', fun, err,
@@ -826,7 +826,7 @@ class Cloud(object):
                     __active_provider_name__=':'.join([alias, driver])
                 ):
                     data[alias][driver] = self.clouds[fun]()
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-except
                 log.error(
                     'Failed to get the output of \'%s()\': %s',
                     fun, err, exc_info_on_loglevel=logging.DEBUG
@@ -864,7 +864,7 @@ class Cloud(object):
                     __active_provider_name__=':'.join([alias, driver])
                 ):
                     data[alias][driver] = self.clouds[fun]()
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-except
                 log.error(
                     'Failed to get the output of \'%s()\': %s',
                     fun, err, exc_info_on_loglevel=logging.DEBUG
@@ -902,7 +902,7 @@ class Cloud(object):
                     __active_provider_name__=':'.join([alias, driver])
                 ):
                     data[alias][driver] = self.clouds[fun]()
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-except
                 log.error(
                     'Failed to get the output of \'%s()\': %s',
                     fun, err, exc_info_on_loglevel=logging.DEBUG
@@ -1105,7 +1105,7 @@ class Cloud(object):
                     filename = os.path.basename(
                         globbed_key_file.pop(selection)
                     )
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     continue
 
                 delete = input(
@@ -1785,7 +1785,7 @@ class Map(Cloud):
                 map_ = compile_template(
                     cached_map, rend, renderer, blacklist, whitelist
                 )
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-except
                 log.error(
                     'Rendering map %s failed, render error:\n%s',
                     self.opts['map'], exc,
@@ -2386,7 +2386,7 @@ def run_parallel_map_providers_query(data, queue=None):
                     cloud.clouds[data['fun']]()
                 )
             )
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-except
         log.debug(
             'Failed to execute \'%s()\' while querying for running nodes: %s',
             data['fun'], err, exc_info_on_loglevel=logging.DEBUG

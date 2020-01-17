@@ -177,7 +177,7 @@ class AsyncRemotePillar(RemotePillarMixin):
                 load,
                 dictkey='pillar',
             )
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             log.exception('Exception getting pillar:')
             raise SaltClientError('Exception getting pillar.')
 
@@ -196,8 +196,10 @@ class AsyncRemotePillar(RemotePillarMixin):
         self._closing = True
         self.channel.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701
 
 
 class RemotePillar(RemotePillarMixin):
@@ -261,8 +263,10 @@ class RemotePillar(RemotePillarMixin):
         self._closing = True
         self.channel.close()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701
 
 
 class PillarCache(object):
@@ -556,7 +560,7 @@ class Pillar(object):
                         saltenv=saltenv,
                         _pillar_rend=True,
                     ))
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             errors.append(
                     ('Rendering Primary Top file failed, render error:\n{0}'
                         .format(exc)))
@@ -595,7 +599,7 @@ class Pillar(object):
                                     _pillar_rend=True,
                                     )
                                 )
-                    except Exception as exc:
+                    except Exception as exc:  # pylint: disable=broad-except
                         errors.append(
                                 ('Rendering Top file {0} failed, render error'
                                  ':\n{1}').format(sls, exc))
@@ -760,7 +764,7 @@ class Pillar(object):
                                      sls,
                                      _pillar_rend=True,
                                      **defaults)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             msg = 'Rendering SLS \'{0}\' failed, render error:\n{1}'.format(
                 sls, exc
             )
@@ -1003,7 +1007,7 @@ class Pillar(object):
                     ext = self._external_pillar_data(pillar,
                                                      val,
                                                      key)
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     errors.append(
                         'Failed to load ext_pillar {0}: {1}'.format(
                             key,
@@ -1133,7 +1137,7 @@ class Pillar(object):
                                 delimiter=self.opts['decrypt_pillar_delimiter'])
                         if ptr is not None:
                             ptr[child] = ret
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     msg = 'Failed to decrypt pillar key \'{0}\': {1}'.format(
                         key, exc
                     )
@@ -1149,8 +1153,10 @@ class Pillar(object):
             return
         self._closing = True
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701
 
 
 # TODO: actually migrate from Pillar to AsyncPillar to allow for futures in

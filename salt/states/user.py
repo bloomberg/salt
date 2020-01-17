@@ -94,9 +94,7 @@ def _changes(name,
     '''
 
     if 'shadow.info' in __salt__:
-        # We pass the password to the shadow.info function on Windows
-        # 'password' is ignored by other OSs
-        lshad = __salt__['shadow.info'](name, password=password)
+        lshad = __salt__['shadow.info'](name)
 
     lusr = __salt__['user.info'](name)
     if not lusr:
@@ -156,9 +154,6 @@ def _changes(name,
     elif 'shadow.info' in __salt__ and salt.utils.platform.is_windows():
         if expire and expire is not -1 and salt.utils.dateutils.strftime(lshad['expire']) != salt.utils.dateutils.strftime(expire):
             change['expire'] = expire
-        if password:
-            if lshad['passwd'] != password and enforce_password:
-                change['passwd'] = password
 
     # GECOS fields
     fullname = salt.utils.data.decode(fullname)
@@ -230,7 +225,7 @@ def _changes(name,
 def present(name,
             uid=None,
             gid=None,
-            usergroup=None,
+            gid_from_name=False,
             groups=None,
             optional_groups=None,
             remove_groups=True,
@@ -277,6 +272,11 @@ def present(name,
         or gid can be used. If not specified, and the user does not exist, then
         the next available gid will be assigned.
 
+    gid_from_name : False
+        If ``True``, the default group id will be set to the id of the group
+        with the same name as the user. If the group does not exist the state
+        will fail.
+
     allow_uid_change : False
         Set to ``True`` to allow the state to update the uid.
 
@@ -286,17 +286,6 @@ def present(name,
         Set to ``True`` to allow the state to update the gid.
 
         .. versionadded:: 2018.3.1
-
-    usergroup
-        If True, a group with the same name as the user will be created. If
-        False, a group with the same name as the user will not be created. The
-        default is distribution-specific. See the USERGROUPS_ENAB section of
-        the login.defs(5) man page.
-
-        .. note::
-            Only supported on GNU/Linux distributions
-
-        .. versionadded:: Fluorine
 
     groups
         A list of groups to assign the user to, pass a list object. If a group
@@ -345,7 +334,7 @@ def present(name,
         Linux, FreeBSD, NetBSD, OpenBSD, and Solaris. If the ``empty_password``
         argument is set to ``True`` then ``password`` is ignored.
         For Windows this is the plain text password.
-        For Linux, the hash can be generated with ``mkpasswd -m sha-256``.
+        For Linux, the hash can be generated with ``openssl passwd -1``.
 
     .. versionchanged:: 0.16.0
        BSD support added.
@@ -474,7 +463,7 @@ def present(name,
             _, algo, shadow_salt, shadow_hash = __salt__['shadow.info'](name)['passwd'].split('$', 4)
             if algo == '1':
                 log.warning('Using MD5 for hashing passwords is considered insecure!')
-            log.debug('Re-using existing shadow salt for hashing password using %s', algorithms.get(algo))
+            log.debug('Re-using existing shadow salt for hashing password using {}'.format(algorithms.get(algo)))
             password = __salt__['shadow.gen_password'](password, crypt_salt=shadow_salt, algorithm=algorithms.get(algo))
         except ValueError:
             log.info('No existing shadow salt found, defaulting to a randomly generated new one')
@@ -537,18 +526,17 @@ def present(name,
                 'for user %s', isected, name
             )
 
-    # If usergroup was specified, we'll also be creating a new
-    # group. We should report this change without setting the gid
-    # variable.
-    if usergroup and __salt__['file.group_to_gid'](name) != '':
-        changes_gid = name
-    else:
-        changes_gid = gid
+    if gid_from_name:
+        gid = __salt__['file.group_to_gid'](name)
+        if gid == '':
+            ret['comment'] = 'Default group with name "{0}" is not present'.format(name)
+            ret['result'] = False
+            return ret
 
     try:
         changes = _changes(name,
                            uid,
-                           changes_gid,
+                           gid,
                            groups,
                            present_optgroups,
                            remove_groups,
@@ -595,9 +583,7 @@ def present(name,
             return ret
         # The user is present
         if 'shadow.info' in __salt__:
-            # We pass the password to the shadow.info function on Windows
-            # 'password' is ignored by other OSs
-            lshad = __salt__['shadow.info'](name, password=password)
+            lshad = __salt__['shadow.info'](name)
         if __grains__['kernel'] in ('OpenBSD', 'FreeBSD'):
             lcpre = __salt__['user.get_loginclass'](name)
         pre = __salt__['user.info'](name)
@@ -666,9 +652,7 @@ def present(name,
         post = __salt__['user.info'](name)
         spost = {}
         if 'shadow.info' in __salt__ and lshad['passwd'] != password:
-            # We pass the password to the shadow.info function on Windows
-            # 'password' is ignored by other OSs
-            spost = __salt__['shadow.info'](name, password=password)
+            spost = __salt__['shadow.info'](name)
         if __grains__['kernel'] in ('OpenBSD', 'FreeBSD'):
             lcpost = __salt__['user.get_loginclass'](name)
         # See if anything changed
@@ -757,8 +741,7 @@ def present(name,
                       'other': other,
                       'createhome': createhome,
                       'nologinit': nologinit,
-                      'loginclass': loginclass,
-                      'usergroup': usergroup}
+                      'loginclass': loginclass}
         else:
             params = ({'name': name,
                        'password': password,

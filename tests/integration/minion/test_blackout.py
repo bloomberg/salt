@@ -6,12 +6,12 @@ Tests for minion blackout
 # Import Python libs
 from __future__ import absolute_import
 import os
+import time
 import logging
 import textwrap
 
 # Import Salt Testing libs
 from tests.support.case import ModuleCase
-from tests.support.helpers import flaky
 from tests.support.runtests import RUNTIME_VARS
 
 # Import Salt libs
@@ -52,12 +52,13 @@ class MinionBlackoutTestCase(ModuleCase):
 
     def tearDown(self):
         self.end_blackout()
-        # Make sure we also refresh the sub_minion pillar
-        refreshed = self.run_function(
-            'saltutil.refresh_pillar',
-            minion_tgt='sub_minion',
-            **{'async': False})
-        self.assertTrue(refreshed)
+        # Be sure to also refresh the sub_minion pillar
+        self.run_function('saltutil.refresh_pillar', minion_tgt='sub_minion')
+        timeout = 120
+        if not self.wait_for_blackout(end=True, tgt='sub_minion', timeout=timeout):
+            raise Exception(
+                'Minion did not exit blackout mode after {} seconds'.format(timeout)
+            )
         self.wait_for_all_jobs()
 
     def cleanup_blackout_pillar(self):
@@ -74,11 +75,31 @@ class MinionBlackoutTestCase(ModuleCase):
         self.wait_for_all_jobs()
         with salt.utils.files.fopen(self.blackout_pillar, 'w') as wfh:
             wfh.write(blackout_data)
-        refreshed = self.run_function(
-            'saltutil.refresh_pillar',
-            **{'async': False})
-        self.assertTrue(refreshed)
+        ret = self.run_function('saltutil.refresh_pillar', timeout=30)
+        timeout = 120
+        if not self.wait_for_blackout(timeout=timeout):
+            raise Exception(
+                'Minion did not enter blackout mode after {} seconds'.format(timeout)
+            )
         log.info('Entered minion blackout.')
+
+    def wait_for_blackout(self, end=False, tgt='minion', timeout=120, sleep=.3):
+        '''
+        Wait for blackout mode to start or end.
+        '''
+        start = time.time()
+        while time.time() - start <= timeout:
+            ret = self.run_function(
+                'pillar.get', minion_tgt=tgt, arg=['minion_blackout'], timeout=30,
+            )
+            if end:
+                if str(ret).find('Minion in blackout mode') == -1:
+                    return True
+            else:
+                if str(ret).find('Minion in blackout mode') != -1:
+                    return True
+            time.sleep(sleep)
+        return False
 
     def end_blackout(self):
         '''
@@ -87,14 +108,15 @@ class MinionBlackoutTestCase(ModuleCase):
         log.info('Exiting minion blackout...')
         with salt.utils.files.fopen(self.blackout_pillar, 'w') as wfh:
             wfh.write('minion_blackout: False\n')
-        refreshed = self.run_function(
-            'saltutil.refresh_pillar',
-            **{'async': False})
-        self.assertTrue(refreshed)
+        self.run_function('saltutil.refresh_pillar')
+        timeout = 120
+        if not self.wait_for_blackout(end=True, timeout=timeout):
+            raise Exception(
+                'Minion did not exit blackout mode after {} seconds'.format(timeout)
+            )
         self.wait_for_all_jobs()
         log.info('Exited minion blackout.')
 
-    @flaky
     def test_blackout(self):
         '''
         Test that basic minion blackout functionality works
@@ -109,7 +131,6 @@ class MinionBlackoutTestCase(ModuleCase):
         ret = self.run_function('test.ping')
         self.assertEqual(ret, True)
 
-    @flaky
     def test_blackout_whitelist(self):
         '''
         Test that minion blackout whitelist works
@@ -128,7 +149,6 @@ class MinionBlackoutTestCase(ModuleCase):
         self.assertTrue(isinstance(fib_ret, list))
         self.assertEqual(fib_ret[0], 13)
 
-    @flaky
     def test_blackout_nonwhitelist(self):
         '''
         Test that minion refuses to run non-whitelisted functions during

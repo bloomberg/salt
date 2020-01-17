@@ -176,6 +176,7 @@ def extracted(name,
               source_hash=None,
               source_hash_name=None,
               source_hash_update=False,
+              skip_files_list_verify=False,
               skip_verify=False,
               password=None,
               options=None,
@@ -183,6 +184,7 @@ def extracted(name,
               force=False,
               overwrite=False,
               clean=False,
+              clean_parent=False,
               user=None,
               group=None,
               if_missing=None,
@@ -410,13 +412,36 @@ def extracted(name,
 
     source_hash_update : False
         Set this to ``True`` if archive should be extracted if source_hash has
-        changed. This would extract regardless of the ``if_missing`` parameter.
+        changed and there is a difference between the archive and the local files.
+        This would extract regardless of the ``if_missing`` parameter.
+
+        Note that this is only checked if the ``source`` value has not changed.
+        If it has (e.g. to increment a version number in the path) then the
+        archive will not be extracted even if the hash has changed.
+
+        .. note::
+            Setting this to ``True`` along with ``keep_source`` set to ``False``
+            will result the ``source`` re-download to do a archive file list check.
+            If it's not desirable please consider the ``skip_files_list_verify``
+            argument.
 
         Note that this is only checked if the ``source`` value has not changed.
         If it has (e.g. to increment a version number in the path) then the
         archive will not be extracted even if the hash has changed.
 
         .. versionadded:: 2016.3.0
+
+    skip_files_list_verify : False
+        Set this to ``True`` if archive should be extracted if source_hash has
+        changed but only checksums of the archive will be checked to determine if
+        the extraction is required.
+
+        .. note::
+            The current limitation of this logic is that you have to set
+            minions ``hash_type`` config option to the same one that you're going
+            to pass via ``source_hash`` argument.
+
+        .. versionadded:: 3000
 
     skip_verify : False
         If ``True``, hash verification of remote file sources (``http://``,
@@ -525,6 +550,14 @@ def extracted(name,
             ``overwrite`` is set to ``True``.
 
         .. versionadded:: 2016.11.1
+
+    clean_parent : False
+        If ``True``, and the archive is extracted, delete the parent
+        directory (i.e. the directory into which the archive is extracted), and
+        then re-create that directory before extracting. Note that ``clean``
+        and ``clean_parent`` are mutually exclusive.
+
+        .. versionadded:: 3000
 
     user
         The user to own each extracted file. Not available on Windows.
@@ -669,6 +702,11 @@ def extracted(name,
     # Remove pub kwargs as they're irrelevant here.
     kwargs = salt.utils.args.clean_kwargs(**kwargs)
 
+    if skip_files_list_verify and skip_verify:
+        ret['comment'] = ('Only one of "skip_files_list_verify" and '
+                          '"skip_verify" can be set to True')
+        return ret
+
     if 'keep_source' in kwargs and 'keep' in kwargs:
         ret.setdefault('warnings', []).append(
             'Both \'keep_source\' and \'keep\' were used. Since these both '
@@ -721,7 +759,7 @@ def extracted(name,
             try:
                 not_rel = os.path.relpath(enforce_ownership_on,
                                           name).startswith('..' + os.sep)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 # A ValueError is raised on Windows when the paths passed to
                 # os.path.relpath are not on the same drive letter. Using a
                 # generic Exception here to keep other possible exception types
@@ -938,6 +976,31 @@ def extracted(name,
     else:
         source_sum = {}
 
+    if skip_files_list_verify:
+        if source_is_local:
+            cached = source_match
+        else:
+            cached = __salt__['cp.is_cached'](source_match, saltenv=__env__)
+
+        if cached:
+            existing_cached_source_sum = _read_cached_checksum(cached)
+            log.debug('Existing source sum is: "%s". Expected source sum is "%s"',
+                      existing_cached_source_sum, source_sum)
+            if source_sum and existing_cached_source_sum:
+                if existing_cached_source_sum['hsum'] == source_sum['hsum']:
+                    ret['result'] = None if __opts__['test'] else True
+                    ret['comment'] = (
+                        'Archive {0} existing source sum is the same as the '
+                        'expected one and skip_files_list_verify argument was set '
+                        'to True. Extraction is not needed'.format(
+                            salt.utils.url.redact_http_basic_auth(source_match)
+                        )
+                    )
+                    return ret
+        else:
+            log.debug('There is no cached source %s available on minion',
+                      source_match)
+
     if source_is_local:
         cached = source_match
     else:
@@ -969,7 +1032,7 @@ def extracted(name,
                                                source_hash_name=source_hash_name,
                                                skip_verify=skip_verify,
                                                saltenv=__env__)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             msg = 'Failed to cache {0}: {1}'.format(
                     salt.utils.url.redact_http_basic_auth(source_match),
                     exc.__str__())
@@ -1080,6 +1143,11 @@ def extracted(name,
                           ))
         return ret
 
+    if clean and clean_parent:
+        ret['comment'] = "Only one of 'clean' and 'clean_parent' can be set to True"
+        ret['result'] = False
+        return ret
+
     extraction_needed = overwrite
     contents_missing = False
 
@@ -1152,6 +1220,15 @@ def extracted(name,
                         )
                     )
                     return ret
+                if __opts__['test'] and clean_parent and contents is not None:
+                    ret['result'] = None
+                    ret['comment'] += (
+                        ' Since the \'clean_parent\' option is enabled, the '
+                        'destination parent directory would be removed first '
+                        'and then re-created and the archive would be '
+                        'extracted'
+                    )
+                    return ret
 
                 # Skip notices of incorrect types if we're cleaning
                 if not (clean and contents is not None):
@@ -1219,6 +1296,26 @@ def extracted(name,
                 ret['comment'] += ', after cleaning destination path(s)'
             _add_explanation(ret, source_hash_trigger, contents_missing)
             return ret
+
+        if clean_parent and contents is not None:
+            errors = []
+            log.debug('Removing directory %s due to clean_parent set to True', name)
+            try:
+                salt.utils.files.rm_rf(name.rstrip(os.sep))
+                ret['changes'].setdefault(
+                    'removed', "Directory {} was removed prior to the extraction".format(name))
+            except OSError as exc:
+                if exc.errno != errno.ENOENT:
+                    errors.append(six.text_type(exc))
+            if errors:
+                msg = (
+                    'Unable to remove the directory {}. The following '
+                    'errors were observed:\n'.format(name)
+                )
+                for error in errors:
+                    msg += '\n- {0}'.format(error)
+                ret['comment'] = msg
+                return ret
 
         if clean and contents is not None:
             errors = []

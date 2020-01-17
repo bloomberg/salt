@@ -18,7 +18,7 @@ from tests.support.runtests import RUNTIME_VARS
 from tests.support.unit import skipIf, TestCase
 from tests.support.case import ModuleCase
 from tests.support.helpers import flaky
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON, patch, MagicMock, Mock
+from tests.support.mock import patch, MagicMock, Mock
 
 # Import Salt libs
 import salt.config
@@ -51,12 +51,6 @@ try:
     HAS_TIMELIB = True
 except ImportError:
     HAS_TIMELIB = False
-
-try:
-    import jmespath  # pylint: disable=W0611
-    HAS_JMESPATH = True
-except ImportError:
-    HAS_JMESPATH = False
 
 BLINESEP = salt.utils.stringutils.to_bytes(os.linesep)
 
@@ -123,13 +117,17 @@ class TestSaltCacheLoader(TestCase):
             self.template_dir
         )
         self.opts = {
+            'file_buffer_size': 1048576,
             'cachedir': self.tempdir,
             'file_roots': {
                 'test': [self.template_dir]
             },
             'pillar_roots': {
                 'test': [self.template_dir]
-            }
+            },
+            'extension_modules': os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                'extmods'),
         }
         super(TestSaltCacheLoader, self).setUp()
 
@@ -170,6 +168,7 @@ class TestSaltCacheLoader(TestCase):
             opts = self.opts
         with patch.object(SaltCacheLoader, 'file_client', Mock()):
             loader = SaltCacheLoader(opts, saltenv)
+            self.addCleanup(setattr, SaltCacheLoader, '_cached_client', None)
         # Create a mock file client and attach it to the loader
         MockFileClient(loader)
         return loader
@@ -230,6 +229,36 @@ class TestSaltCacheLoader(TestCase):
         result = jinja.get_template('hello_include').render(a='Hi', b='Salt')
         self.assertEqual(result, 'Hey world !Hi Salt !')
 
+    def test_cached_file_client(self):
+        '''
+        Multiple instantiations of SaltCacheLoader use the cached file client
+        '''
+        with patch('salt.transport.client.ReqChannel.factory', Mock()):
+            loader_a = SaltCacheLoader(self.opts)
+            loader_b = SaltCacheLoader(self.opts)
+        assert loader_a._file_client is loader_b._file_client
+
+    def test_file_client_kwarg(self):
+        '''
+        A file client can be passed to SaltCacheLoader overriding the any
+        cached file client
+        '''
+        mfc = MockFileClient()
+        loader = SaltCacheLoader(self.opts, _file_client=mfc)
+        assert loader._file_client is mfc
+
+    def test_cache_loader_shutdown(self):
+        '''
+        The shudown method can be called without raising an exception when the
+        file_client does not have a destroy method
+        '''
+        mfc = MockFileClient()
+        assert not hasattr(mfc, 'destroy')
+        loader = SaltCacheLoader(self.opts, _file_client=mfc)
+        assert loader._file_client is mfc
+        # Shutdown method should not raise any exceptions
+        loader.shutdown()
+
 
 class TestGetTemplate(TestCase):
 
@@ -241,6 +270,7 @@ class TestGetTemplate(TestCase):
             self.template_dir
         )
         self.local_opts = {
+            'file_buffer_size': 1048576,
             'cachedir': self.tempdir,
             'file_client': 'local',
             'file_ignore_regex': None,
@@ -506,7 +536,6 @@ class TestGetTemplate(TestCase):
         )
 
     @skipIf(six.PY3, 'Not applicable to Python 3')
-    @skipIf(NO_MOCK, NO_MOCK_REASON)
     def test_render_with_unicode_syntax_error(self):
         with patch.object(builtins, '__salt_system_encoding__', 'utf-8'):
             template = 'hello\n\n{{ bad\n\nfoo한'
@@ -519,7 +548,6 @@ class TestGetTemplate(TestCase):
                 dict(opts=self.local_opts, saltenv='test', salt=self.local_salt)
             )
 
-    @skipIf(NO_MOCK, NO_MOCK_REASON)
     def test_render_with_utf8_syntax_error(self):
         with patch.object(builtins, '__salt_system_encoding__', 'utf-8'):
             template = 'hello\n\n{{ bad\n\nfoo한'
@@ -574,6 +602,7 @@ class TestJinjaDefaultOptions(TestCase):
         TestCase.__init__(self, *args, **kws)
         self.local_opts = {
             'cachedir': os.path.join(RUNTIME_VARS.TMP, 'jinja-template-cache'),
+            'file_buffer_size': 1048576,
             'file_client': 'local',
             'file_ignore_regex': None,
             'file_ignore_glob': None,
@@ -635,6 +664,7 @@ class TestCustomExtensions(TestCase):
         super(TestCustomExtensions, self).__init__(*args, **kws)
         self.local_opts = {
             'cachedir': os.path.join(RUNTIME_VARS.TMP, 'jinja-template-cache'),
+            'file_buffer_size': 1048576,
             'file_client': 'local',
             'file_ignore_regex': None,
             'file_ignore_glob': None,
@@ -1367,33 +1397,6 @@ class TestCustomExtensions(TestCase):
                                      dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
         self.assertEqual(rendered, '1, 4')
 
-    def test_method_call(self):
-        '''
-        Test the `method_call` Jinja filter.
-        '''
-        rendered = render_jinja_tmpl("{{ 6|method_call('bit_length') }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "3")
-        rendered = render_jinja_tmpl("{{ 6.7|method_call('is_integer') }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "False")
-        rendered = render_jinja_tmpl("{{ 'absaltba'|method_call('strip', 'ab') }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "salt")
-        rendered = render_jinja_tmpl("{{ [1, 2, 1, 3, 4]|method_call('index', 1, 1, 3) }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "2")
-
-        # have to use `dictsort` to keep test result deterministic
-        rendered = render_jinja_tmpl("{{ {}|method_call('fromkeys', ['a', 'b', 'c'], 0)|dictsort }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "[('a', 0), ('b', 0), ('c', 0)]")
-
-        # missing object method test
-        rendered = render_jinja_tmpl("{{ 6|method_call('bit_width') }}",
-                                     dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
-        self.assertEqual(rendered, "None")
-
     def test_md5(self):
         '''
         Test the `md5` Jinja filter.
@@ -1448,7 +1451,6 @@ class TestCustomExtensions(TestCase):
                                      dict(opts=self.local_opts, saltenv='test', salt=self.local_salt))
         self.assertEqual(rendered, 'random')
 
-    @skipIf(HAS_JMESPATH is False, 'The `jmespath` library is not installed.')
     def test_json_query(self):
         '''
         Test the `json_query` Jinja filter.
@@ -1475,7 +1477,7 @@ class TestDotNotationLookup(ModuleCase):
     '''
     Tests to call Salt functions via Jinja with various lookup syntaxes
     '''
-    def setUp(self, *args, **kwargs):
+    def setUp(self):
         functions = {
             'mocktest.ping': lambda: True,
             'mockgrains.get': lambda x: 'jerry',

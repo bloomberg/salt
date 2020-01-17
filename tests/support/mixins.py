@@ -14,6 +14,7 @@
 from __future__ import absolute_import, print_function
 import os
 import sys
+import copy
 import time
 import types
 import atexit
@@ -23,9 +24,10 @@ import tempfile
 import functools
 import subprocess
 import multiprocessing
+from collections import OrderedDict
 
 # Import Salt Testing Libs
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON, patch
+from tests.support.mock import patch
 from tests.support.runtests import RUNTIME_VARS
 from tests.support.paths import CODE_DIR
 
@@ -93,8 +95,8 @@ class AdaptedConfigurationTestCaseMixin(object):
 
     @staticmethod
     def get_temp_config(config_for, **config_overrides):
-        rootdir = tempfile.mkdtemp(dir=RUNTIME_VARS.TMP)
-        conf_dir = os.path.join(rootdir, 'conf')
+        rootdir = config_overrides.get('root_dir', tempfile.mkdtemp(dir=RUNTIME_VARS.TMP))
+        conf_dir = config_overrides.pop('conf_dir', os.path.join(rootdir, 'conf'))
         for key in ('cachedir', 'pki_dir', 'sock_dir'):
             if key not in config_overrides:
                 config_overrides[key] = key
@@ -137,7 +139,7 @@ class AdaptedConfigurationTestCaseMixin(object):
     @staticmethod
     def get_config(config_for, from_scratch=False):
         if from_scratch:
-            if config_for in ('master', 'syndic_master'):
+            if config_for in ('master', 'syndic_master', 'mm_master', 'mm_sub_master'):
                 return salt.config.master_config(
                     AdaptedConfigurationTestCaseMixin.get_config_file_path(config_for)
                 )
@@ -156,7 +158,7 @@ class AdaptedConfigurationTestCaseMixin(object):
                 )
 
         if config_for not in RUNTIME_VARS.RUNTIME_CONFIGS:
-            if config_for in ('master', 'syndic_master'):
+            if config_for in ('master', 'syndic_master', 'mm_master', 'mm_sub_master'):
                 RUNTIME_VARS.RUNTIME_CONFIGS[config_for] = freeze(
                     salt.config.master_config(
                         AdaptedConfigurationTestCaseMixin.get_config_file_path(config_for)
@@ -199,6 +201,14 @@ class AdaptedConfigurationTestCaseMixin(object):
             return os.path.join(RUNTIME_VARS.TMP_SYNDIC_MINION_CONF_DIR, 'minion')
         if filename == 'sub_minion':
             return os.path.join(RUNTIME_VARS.TMP_SUB_MINION_CONF_DIR, 'minion')
+        if filename == 'mm_master':
+            return os.path.join(RUNTIME_VARS.TMP_MM_CONF_DIR, 'master')
+        if filename == 'mm_sub_master':
+            return os.path.join(RUNTIME_VARS.TMP_MM_SUB_CONF_DIR, 'master')
+        if filename == 'mm_minion':
+            return os.path.join(RUNTIME_VARS.TMP_MM_CONF_DIR, 'minion')
+        if filename == 'mm_sub_minion':
+            return os.path.join(RUNTIME_VARS.TMP_MM_SUB_CONF_DIR, 'minion')
         return os.path.join(RUNTIME_VARS.TMP_CONF_DIR, filename)
 
     @property
@@ -221,6 +231,27 @@ class AdaptedConfigurationTestCaseMixin(object):
         Return the options used for the sub_minion
         '''
         return self.get_config('sub_minion')
+
+    @property
+    def mm_master_opts(self):
+        '''
+        Return the options used for the multimaster master
+        '''
+        return self.get_config('mm_master')
+
+    @property
+    def mm_sub_master_opts(self):
+        '''
+        Return the options used for the multimaster sub-master
+        '''
+        return self.get_config('mm_sub_master')
+
+    @property
+    def mm_minion_opts(self):
+        '''
+        Return the options used for the minion
+        '''
+        return self.get_config('mm_minion')
 
 
 class SaltClientTestCaseMixin(AdaptedConfigurationTestCaseMixin):
@@ -258,6 +289,50 @@ class SaltClientTestCaseMixin(AdaptedConfigurationTestCaseMixin):
             mopts = self.get_config(self._salt_client_config_file_name_, from_scratch=True)
             RUNTIME_VARS.RUNTIME_CONFIGS['runtime_client'] = salt.client.get_local_client(mopts=mopts)
         return RUNTIME_VARS.RUNTIME_CONFIGS['runtime_client']
+
+
+class SaltMultimasterClientTestCaseMixin(AdaptedConfigurationTestCaseMixin):
+    '''
+    Mix-in class that provides a ``clients`` attribute which returns a list of Salt
+    :class:`LocalClient<salt:salt.client.LocalClient>`.
+
+    .. code-block:: python
+
+        class LocalClientTestCase(TestCase, SaltMultimasterClientTestCaseMixin):
+
+            def test_check_pub_data(self):
+                just_minions = {'minions': ['m1', 'm2']}
+                jid_no_minions = {'jid': '1234', 'minions': []}
+                valid_pub_data = {'minions': ['m1', 'm2'], 'jid': '1234'}
+
+                for client in self.clients:
+                    self.assertRaises(EauthAuthenticationError,
+                                      client._check_pub_data, None)
+                    self.assertDictEqual({},
+                        client._check_pub_data(just_minions),
+                        'Did not handle lack of jid correctly')
+
+                    self.assertDictEqual(
+                        {},
+                        client._check_pub_data({'jid': '0'}),
+                        'Passing JID of zero is not handled gracefully')
+    '''
+    _salt_client_config_file_name_ = 'master'
+
+    @property
+    def clients(self):
+        # Late import
+        import salt.client
+        if 'runtime_clients' not in RUNTIME_VARS.RUNTIME_CONFIGS:
+            RUNTIME_VARS.RUNTIME_CONFIGS['runtime_clients'] = OrderedDict()
+
+        runtime_clients = RUNTIME_VARS.RUNTIME_CONFIGS['runtime_clients']
+        for master_id in ('mm-master', 'mm-sub-master'):
+            if master_id in runtime_clients:
+                continue
+            mopts = self.get_config(master_id.replace('-', '_'), from_scratch=True)
+            runtime_clients[master_id] = salt.client.get_local_client(mopts=mopts)
+        return runtime_clients
 
 
 class ShellCaseCommonTestsMixin(CheckShellBinaryNameAndVersionMixin):
@@ -345,6 +420,8 @@ class _FixLoaderModuleMockMixinMroOrder(type):
 class LoaderModuleMockMixin(six.with_metaclass(_FixLoaderModuleMockMixinMroOrder, object)):
     '''
     This class will setup salt loader dunders.
+
+    Please check `set_up_loader_mocks` above
     '''
 
     # Define our setUp function decorator
@@ -353,9 +430,6 @@ class LoaderModuleMockMixin(six.with_metaclass(_FixLoaderModuleMockMixinMroOrder
 
         @functools.wraps(setup_func)
         def wrapper(self):
-            if NO_MOCK:
-                self.skipTest(NO_MOCK_REASON)
-
             loader_modules_configs = self.setup_loader_modules()
             if not isinstance(loader_modules_configs, dict):
                 raise RuntimeError(
@@ -563,7 +637,7 @@ class SaltReturnAssertsMixin(object):
             for saltret in self.__getWithinSaltReturn(ret, 'result'):
                 self.assertTrue(saltret)
         except AssertionError:
-            log.info('Salt Full Return:\n%s', pprint.pformat(ret))
+            log.info('Salt Full Return:\n{0}'.format(pprint.pformat(ret)))
             try:
                 raise AssertionError(
                     '{result} is not True. Salt Comment:\n{comment}'.format(
@@ -582,7 +656,7 @@ class SaltReturnAssertsMixin(object):
             for saltret in self.__getWithinSaltReturn(ret, 'result'):
                 self.assertFalse(saltret)
         except AssertionError:
-            log.info('Salt Full Return:\n%s', pprint.pformat(ret))
+            log.info('Salt Full Return:\n{0}'.format(pprint.pformat(ret)))
             try:
                 raise AssertionError(
                     '{result} is not False. Salt Comment:\n{comment}'.format(
@@ -599,7 +673,7 @@ class SaltReturnAssertsMixin(object):
             for saltret in self.__getWithinSaltReturn(ret, 'result'):
                 self.assertIsNone(saltret)
         except AssertionError:
-            log.info('Salt Full Return:\n%s', pprint.pformat(ret))
+            log.info('Salt Full Return:\n{0}'.format(pprint.pformat(ret)))
             try:
                 raise AssertionError(
                     '{result} is not None. Salt Comment:\n{comment}'.format(
@@ -653,23 +727,18 @@ class SaltReturnAssertsMixin(object):
             self.assertNotEqual(saltret, comparison)
 
 
-def _fetch_events(q):
+def _fetch_events(q, opts):
     '''
     Collect events and store them
     '''
     def _clean_queue():
-        print('Cleaning queue!')
+        log.info('Cleaning queue!')
         while not q.empty():
             queue_item = q.get()
             queue_item.task_done()
 
     atexit.register(_clean_queue)
-    a_config = AdaptedConfigurationTestCaseMixin()
-    event = salt.utils.event.get_event(
-        'minion',
-        sock_dir=a_config.get_config('minion')['sock_dir'],
-        opts=a_config.get_config('minion'),
-    )
+    event = salt.utils.event.get_event('minion', sock_dir=opts['sock_dir'], opts=opts)
 
     # Wait for event bus to be connected
     while not event.connect_pull(30):
@@ -681,7 +750,7 @@ def _fetch_events(q):
     while True:
         try:
             events = event.get_event(full=False)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             # This is broad but we'll see all kinds of issues right now
             # if we drop the proc out from under the socket while we're reading
             log.exception("Exception caught while getting events %r", exc)
@@ -695,10 +764,11 @@ class SaltMinionEventAssertsMixin(object):
 
     @classmethod
     def setUpClass(cls):
+        opts = copy.deepcopy(RUNTIME_VARS.RUNTIME_CONFIGS['minion'])
         cls.q = multiprocessing.Queue()
-        cls.fetch_proc = salt.utils.process.SignalHandlingMultiprocessingProcess(
+        cls.fetch_proc = salt.utils.process.SignalHandlingProcess(
             target=_fetch_events,
-            args=(cls.q,),
+            args=(cls.q, opts),
             name='Process-{}-Queue'.format(cls.__name__)
         )
         cls.fetch_proc.start()
@@ -707,7 +777,6 @@ class SaltMinionEventAssertsMixin(object):
         if msg != 'CONNECTED':
             # Just in case something very bad happens
             raise RuntimeError('Unexpected message in test\'s event queue')
-        return object.__new__(cls)
 
     @classmethod
     def tearDownClass(cls):

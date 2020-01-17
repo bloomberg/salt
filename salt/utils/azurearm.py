@@ -4,7 +4,7 @@ Azure (ARM) Utilities
 
 .. versionadded:: 2019.2.0
 
-:maintainer: <devops@decisionlab.io>
+:maintainer: <devops@eitr.tech>
 :maturity: new
 :depends:
     * `azure <https://pypi.python.org/pypi/azure>`_ >= 2.0.0rc6
@@ -46,6 +46,9 @@ try:
     from azure.common.credentials import (
         UserPassCredentials,
         ServicePrincipalCredentials,
+    )
+    from msrestazure.azure_active_directory import (
+        MSIAuthentication
     )
     from msrestazure.azure_cloud import (
         MetadataEndpointError,
@@ -111,13 +114,7 @@ def _determine_auth(**kwargs):
                                               kwargs['password'],
                                               cloud_environment=cloud_env)
     elif 'subscription_id' in kwargs:
-        try:
-            from msrestazure.azure_active_directory import (
-                MSIAuthentication
-            )
-            credentials = MSIAuthentication(cloud_environment=cloud_env)
-        except ImportError:
-            raise SaltSystemExit(msg='MSI authentication support not availabe (requires msrestazure >= 0.4.14)')
+        credentials = MSIAuthentication(cloud_environment=cloud_env)
 
     else:
         raise SaltInvocationError(
@@ -155,7 +152,7 @@ def get_client(client_type, **kwargs):
 
     if client_type not in client_map:
         raise SaltSystemExit(
-            msg='The Azure ARM client_type {0} specified can not be found.'.format(
+            'The Azure ARM client_type {0} specified can not be found.'.format(
                 client_type)
         )
 

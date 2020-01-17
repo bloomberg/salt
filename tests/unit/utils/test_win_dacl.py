@@ -8,7 +8,6 @@ import tempfile
 # Import Salt Testing Libs
 from tests.support.helpers import destructiveTest, generate_random_name, patch
 from tests.support.mixins import LoaderModuleMockMixin
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON
 from tests.support.unit import TestCase, skipIf
 
 # Import Salt Libs
@@ -26,7 +25,6 @@ except ImportError:
 FAKE_KEY = 'SOFTWARE\\{0}'.format(generate_random_name('SaltTesting-'))
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 @skipIf(not HAS_WIN32, 'Requires pywin32')
 @skipIf(not salt.utils.platform.is_windows(), 'System is not Windows')
 class WinDaclTestCase(TestCase):
@@ -83,7 +81,6 @@ class WinDaclTestCase(TestCase):
         self.assertEqual(win_dacl.get_name(sid_obj), 'Administrators')
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 @skipIf(not HAS_WIN32, 'Requires pywin32')
 @skipIf(not salt.utils.platform.is_windows(), 'System is not Windows')
 class WinDaclRegTestCase(TestCase, LoaderModuleMockMixin):
@@ -295,10 +292,10 @@ class WinDaclRegTestCase(TestCase, LoaderModuleMockMixin):
                 'NETWORK SERVICE': {
                     'deny': {
                         'applies to': 'This key and subkeys',
-                        'permissions': ['Set Value',
-                                        'Delete',
-                                        'Write Owner',
-                                        'Write DAC']}}}}
+                        'permissions': ['Delete',
+                                        'Set Value',
+                                        'Write DAC',
+                                        'Write Owner']}}}}
         self.assertDictEqual(
             win_dacl.get_permissions(
                 obj_name=self.obj_name,
@@ -383,7 +380,6 @@ class WinDaclRegTestCase(TestCase, LoaderModuleMockMixin):
         self.assertDictEqual(result, expected)
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 @skipIf(not HAS_WIN32, 'Requires pywin32')
 @skipIf(not salt.utils.platform.is_windows(), 'System is not Windows')
 class WinDaclFileTestCase(TestCase, LoaderModuleMockMixin):
@@ -595,10 +591,10 @@ class WinDaclFileTestCase(TestCase, LoaderModuleMockMixin):
                 'NETWORK SERVICE': {
                     'deny': {
                         'applies to': 'Not Inherited (file)',
-                        'permissions': ['Delete',
+                        'permissions': ['Change permissions',
                                         'Create files / write data',
-                                        'Write attributes',
-                                        'Change permissions']}}}}
+                                        'Delete',
+                                        'Write attributes']}}}}
         self.assertDictEqual(
             win_dacl.get_permissions(
                 obj_name=self.obj_name,

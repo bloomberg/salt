@@ -27,7 +27,7 @@ def match(tgt, opts=None):
         opts = __opts__
     nodegroups = opts.get('nodegroups', {})
     matchers = salt.loader.matchers(opts)
-    minion_id = opts.get('minion_id', __opts__['id'])
+    minion_id = opts.get('minion_id', opts['id'])
 
     if not isinstance(tgt, six.string_types) and not isinstance(tgt, (list, tuple)):
         log.error('Compound target received that is neither string, list nor tuple')
@@ -92,7 +92,7 @@ def match(tgt, opts=None):
                 return False
 
             engine_args = [target_info['pattern']]
-            engine_kwargs = {}
+            engine_kwargs = {'opts': opts}
             if target_info['delimiter']:
                 engine_kwargs['delimiter'] = target_info['delimiter']
 
@@ -102,13 +102,13 @@ def match(tgt, opts=None):
 
         else:
             # The match is not explicitly defined, evaluate it as a glob
-            results.append(six.text_type(matchers['glob_match.match'](word)))
+            results.append(six.text_type(matchers['glob_match.match'](word, opts)))
 
     results = ' '.join(results)
     log.debug('compound_match %s ? "%s" => "%s"', minion_id, tgt, results)
     try:
         return eval(results)  # pylint: disable=W0123
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         log.error(
             'Invalid compound target: %s for results: %s', tgt, results)
         return False

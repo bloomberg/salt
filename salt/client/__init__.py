@@ -21,6 +21,7 @@ The data structure needs to be:
 # Import python libs
 from __future__ import absolute_import, print_function, unicode_literals
 import os
+import sys
 import time
 import random
 import logging
@@ -319,7 +320,7 @@ class LocalClient(object):
             >>> local.run_job('*', 'test.sleep', [300])
             {'jid': '20131219215650131543', 'minions': ['jerry']}
         '''
-        arg = salt.utils.args.parse_input(arg, kwargs=kwarg)
+        arg = salt.utils.args.condition_input(arg, kwarg)
 
         try:
             pub_data = self.pub(
@@ -338,10 +339,10 @@ class LocalClient(object):
                 'The salt master could not be contacted. Is master running?'
             )
         except AuthenticationError as err:
-            raise AuthenticationError(err)
+            six.reraise(*sys.exc_info())
         except AuthorizationError as err:
-            raise AuthorizationError(err)
-        except Exception as general_exception:
+            six.reraise(*sys.exc_info())
+        except Exception as general_exception:  # pylint: disable=broad-except
             # Convert to generic client error and pass along message
             raise SaltClientError(general_exception)
 
@@ -379,7 +380,7 @@ class LocalClient(object):
             >>> local.run_job_async('*', 'test.sleep', [300])
             {'jid': '20131219215650131543', 'minions': ['jerry']}
         '''
-        arg = salt.utils.args.parse_input(arg, kwargs=kwarg)
+        arg = salt.utils.args.condition_input(arg, kwarg)
 
         try:
             pub_data = yield self.pub_async(
@@ -402,7 +403,7 @@ class LocalClient(object):
             raise AuthenticationError(err)
         except AuthorizationError as err:
             raise AuthorizationError(err)
-        except Exception as general_exception:
+        except Exception as general_exception:  # pylint: disable=broad-except
             # Convert to generic client error and pass along message
             raise SaltClientError(general_exception)
 
@@ -431,13 +432,13 @@ class LocalClient(object):
             >>> local.cmd_async('*', 'test.sleep', [300])
             '20131219215921857715'
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         pub_data = self.run_job(tgt,
                                 fun,
                                 arg,
                                 tgt_type,
                                 ret,
                                 jid=jid,
-                                kwarg=kwarg,
                                 listen=False,
                                 **kwargs)
         try:
@@ -528,22 +529,23 @@ class LocalClient(object):
             {'dave': {...}}
             {'stewart': {...}}
         '''
+        # We need to re-import salt.utils.args here
+        # even though it has already been imported.
+        # when cmd_batch is called via the NetAPI
+        # the module is unavailable.
+        import salt.utils.args
+
         # Late import - not used anywhere else in this file
         import salt.cli.batch
-        opts = salt.cli.batch.batch_get_opts(
-            tgt, fun, batch, self.opts,
-            arg=arg, tgt_type=tgt_type, ret=ret, kwarg=kwarg, **kwargs)
 
-        eauth = salt.cli.batch.batch_get_eauth(kwargs)
-
-        arg = salt.utils.args.parse_input(arg, kwargs=kwarg)
+        arg = salt.utils.args.condition_input(arg, kwarg)
         opts = {'tgt': tgt,
                 'fun': fun,
                 'arg': arg,
                 'tgt_type': tgt_type,
                 'ret': ret,
                 'batch': batch,
-                'failhard': kwargs.get('failhard', False),
+                'failhard': kwargs.get('failhard', self.opts.get('failhard', False)),
                 'raw': kwargs.get('raw', False)}
 
         if 'timeout' in kwargs:
@@ -566,7 +568,6 @@ class LocalClient(object):
         for key, val in six.iteritems(self.opts):
             if key not in opts:
                 opts[key] = val
-
         batch = salt.cli.batch.Batch(opts, eauth=eauth, quiet=True)
         for ret in batch.run():
             yield ret
@@ -685,6 +686,7 @@ class LocalClient(object):
             minion ID. A compound command will return a sub-dictionary keyed by
             function name.
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         was_listening = self.event.cpub
 
         try:
@@ -695,7 +697,6 @@ class LocalClient(object):
                                     ret,
                                     timeout,
                                     jid,
-                                    kwarg=kwarg,
                                     listen=True,
                                     **kwargs)
 
@@ -745,29 +746,8 @@ class LocalClient(object):
         :param verbose: Print extra information about the running command
         :returns: A generator
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         was_listening = self.event.cpub
-
-        if fun.startswith('state.'):
-            ref = {'compound': '-C',
-                    'glob': '',
-                    'grain': '-G',
-                    'grain_pcre': '-P',
-                    'ipcidr': '-S',
-                    'list': '-L',
-                    'nodegroup': '-N',
-                    'pcre': '-E',
-                    'pillar': '-I',
-                    'pillar_pcre': '-J'}
-            if HAS_RANGE:
-                ref['range'] = '-R'
-            if ref[tgt_type].startswith('-'):
-                self.target_data = "{0} '{1}'".format(
-                    ref[tgt_type],
-                    ','.join(tgt) if isinstance(tgt, list) else tgt)
-            else:
-                self.target_data = ','.join(tgt) if isinstance(tgt, list) else tgt
-        else:
-            self.target_data = ''
 
         try:
             self.pub_data = self.run_job(
@@ -777,7 +757,6 @@ class LocalClient(object):
                 tgt_type,
                 ret,
                 timeout,
-                kwarg=kwarg,
                 listen=True,
                 **kwargs)
 
@@ -800,21 +779,16 @@ class LocalClient(object):
 
                         yield fn_ret
                 except KeyboardInterrupt:
-                    exit_msg = (
-                        '\nExiting gracefully on Ctrl-c'
+                    raise SystemExit(
                         '\n'
                         'This job\'s jid is: {0}\n'
+                        'Exiting gracefully on Ctrl-c\n'
                         'The minions may not have all finished running and any '
-                        'remaining minions will return upon completion.\n\n'
-                        'To look up the return data for this job later, run the '
-                        'following command:\n'
-                        'salt-run jobs.lookup_jid {0}'.format(self.pub_data['jid']))
-                    if self.target_data:
-                        exit_msg += (
-                            '\n\n'
-                            'To set up the state run to safely exit, run the following command:\n'
-                            'salt {0} state.soft_kill {1}'.format(self.target_data, self.pub_data['jid']))
-                    raise SystemExit(exit_msg)
+                        'remaining minions will return upon completion. To look '
+                        'up the return data for this job later, run the following '
+                        'command:\n\n'
+                        'salt-run jobs.lookup_jid {0}'.format(self.pub_data['jid'])
+                    )
         finally:
             if not was_listening:
                 self.event.close_pub()
@@ -850,6 +824,7 @@ class LocalClient(object):
             {'dave': {'ret': True}}
             {'stewart': {'ret': True}}
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         was_listening = self.event.cpub
 
         try:
@@ -860,7 +835,6 @@ class LocalClient(object):
                 tgt_type,
                 ret,
                 timeout,
-                kwarg=kwarg,
                 listen=True,
                 **kwargs)
 
@@ -917,6 +891,7 @@ class LocalClient(object):
             None
             {'stewart': {'ret': True}}
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         was_listening = self.event.cpub
 
         try:
@@ -927,7 +902,6 @@ class LocalClient(object):
                 tgt_type,
                 ret,
                 timeout,
-                kwarg=kwarg,
                 listen=True,
                 **kwargs)
 
@@ -965,6 +939,7 @@ class LocalClient(object):
         '''
         Execute a salt command and return
         '''
+        arg = salt.utils.args.condition_input(arg, kwarg)
         was_listening = self.event.cpub
 
         try:
@@ -975,7 +950,6 @@ class LocalClient(object):
                 tgt_type,
                 ret,
                 timeout,
-                kwarg=kwarg,
                 listen=True,
                 **kwargs)
 
@@ -1100,7 +1074,7 @@ class LocalClient(object):
                 yield {}
                 # stop the iteration, since the jid is invalid
                 raise StopIteration()
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.warning('Returner unavailable: %s', exc, exc_info_on_loglevel=logging.DEBUG)
         # Wait for the hosts to check in
         last_time = False
@@ -1316,7 +1290,7 @@ class LocalClient(object):
             if self.returners['{0}.get_load'.format(self.opts['master_job_cache'])](jid) == {}:
                 log.warning('jid does not exist')
                 return ret
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             raise SaltClientError('Master job cache returner [{0}] failed to verify jid. '
                                   'Exception details: {1}'.format(self.opts['master_job_cache'], exc))
 
@@ -1361,7 +1335,7 @@ class LocalClient(object):
 
         try:
             data = self.returners['{0}.get_jid'.format(self.opts['master_job_cache'])](jid)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             raise SaltClientError('Returner {0} could not fetch jid data. '
                                   'Exception details: {1}'.format(
                                       self.opts['master_job_cache'],
@@ -1410,7 +1384,7 @@ class LocalClient(object):
 
         try:
             data = self.returners['{0}.get_jid'.format(self.opts['master_job_cache'])](jid)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             raise SaltClientError('Could not examine master job cache. '
                                   'Error occurred in {0} returner. '
                                   'Exception details: {1}'.format(self.opts['master_job_cache'],
@@ -1464,7 +1438,7 @@ class LocalClient(object):
             if self.returners['{0}.get_load'.format(self.opts['master_job_cache'])](jid) == {}:
                 log.warning('jid does not exist')
                 return ret
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             raise SaltClientError('Load could not be retrieved from '
                                   'returner {0}. Exception details: {1}'.format(
                                       self.opts['master_job_cache'],
@@ -1579,12 +1553,7 @@ class LocalClient(object):
                             yield {
                                 id_: {
                                     'out': 'no_return',
-                                    'ret': 'Minion did not return. [No response]'
-                                    '\nThe minions may not have all finished running and any '
-                                    'remaining minions will return upon completion. To look '
-                                    'up the return data for this job later, run the following '
-                                    'command:\n\n'
-                                    'salt-run jobs.lookup_jid {0}'.format(jid),
+                                    'ret': 'Minion did not return. [No response]',
                                     'retcode': salt.defaults.exitcodes.EX_GENERIC
                                 }
                             }
@@ -1620,8 +1589,12 @@ class LocalClient(object):
             if 'minions' in raw.get('data', {}):
                 continue
             try:
-                found.add(raw['id'])
-                ret = {raw['id']: {'ret': raw['return']}}
+                # There might be two jobs for the same minion, so we have to check for the jid
+                if jid == raw['jid']:
+                    found.add(raw['id'])
+                    ret = {raw['id']: {'ret': raw['return']}}
+                else:
+                    continue
             except KeyError:
                 # Ignore other erroneous messages
                 continue
@@ -1749,57 +1722,56 @@ class LocalClient(object):
                 timeout,
                 **kwargs)
 
-        master_uri = 'tcp://' + salt.utils.zeromq.ip_bracket(self.opts['interface']) + \
-                     ':' + six.text_type(self.opts['ret_port'])
-        channel = salt.transport.client.ReqChannel.factory(self.opts,
-                                                           crypt='clear',
-                                                           master_uri=master_uri)
+        master_uri = 'tcp://{}:{}'.format(
+            salt.utils.zeromq.ip_bracket(self.opts['interface']),
+            six.text_type(self.opts['ret_port'])
+        )
 
-        try:
-            # Ensure that the event subscriber is connected.
-            # If not, we won't get a response, so error out
-            if listen and not self.event.connect_pub(timeout=timeout):
-                raise SaltReqTimeoutError()
-            payload = channel.send(payload_kwargs, timeout=timeout)
-        except SaltReqTimeoutError as err:
-            log.error(err)
-            raise SaltReqTimeoutError(
-                'Salt request timed out. The master is not responding. You '
-                'may need to run your command with `--async` in order to '
-                'bypass the congested event bus. With `--async`, the CLI tool '
-                'will print the job id (jid) and exit immediately without '
-                'listening for responses. You can then use '
-                '`salt-run jobs.lookup_jid` to look up the results of the job '
-                'in the job cache later.'
-            )
+        with salt.transport.client.ReqChannel.factory(self.opts,
+                                                      crypt='clear',
+                                                      master_uri=master_uri) as channel:
+            try:
+                # Ensure that the event subscriber is connected.
+                # If not, we won't get a response, so error out
+                if listen and not self.event.connect_pub(timeout=timeout):
+                    raise SaltReqTimeoutError()
+                payload = channel.send(payload_kwargs, timeout=timeout)
+            except SaltReqTimeoutError as err:
+                log.error(err)
+                raise SaltReqTimeoutError(
+                    'Salt request timed out. The master is not responding. You '
+                    'may need to run your command with `--async` in order to '
+                    'bypass the congested event bus. With `--async`, the CLI tool '
+                    'will print the job id (jid) and exit immediately without '
+                    'listening for responses. You can then use '
+                    '`salt-run jobs.lookup_jid` to look up the results of the job '
+                    'in the job cache later.'
+                )
 
-        if not payload:
-            # The master key could have changed out from under us! Regen
-            # and try again if the key has changed
-            key = self.__read_master_key()
-            if key == self.key:
+            if not payload:
+                # The master key could have changed out from under us! Regen
+                # and try again if the key has changed
+                key = self.__read_master_key()
+                if key == self.key:
+                    return payload
+                self.key = key
+                payload_kwargs['key'] = self.key
+                payload = channel.send(payload_kwargs)
+
+            error = payload.pop('error', None)
+            if error is not None:
+                if isinstance(error, dict):
+                    err_name = error.get('name', '')
+                    err_msg = error.get('message', '')
+                    if err_name == 'AuthenticationError':
+                        raise AuthenticationError(err_msg)
+                    elif err_name == 'AuthorizationError':
+                        raise AuthorizationError(err_msg)
+
+                raise PublishError(error)
+
+            if not payload:
                 return payload
-            self.key = key
-            payload_kwargs['key'] = self.key
-            payload = channel.send(payload_kwargs)
-
-        error = payload.pop('error', None)
-        if error is not None:
-            if isinstance(error, dict):
-                err_name = error.get('name', '')
-                err_msg = error.get('message', '')
-                if err_name == 'AuthenticationError':
-                    raise AuthenticationError(err_msg)
-                elif err_name == 'AuthorizationError':
-                    raise AuthorizationError(err_msg)
-
-            raise PublishError(error)
-
-        if not payload:
-            return payload
-
-        # We have the payload, let's get rid of the channel fast(GC'ed faster)
-        channel.close()
 
         return {'jid': payload['load']['jid'],
                 'minions': payload['load']['minions']}
@@ -1859,59 +1831,57 @@ class LocalClient(object):
 
         master_uri = 'tcp://' + salt.utils.zeromq.ip_bracket(self.opts['interface']) + \
                      ':' + six.text_type(self.opts['ret_port'])
-        channel = salt.transport.client.AsyncReqChannel.factory(self.opts,
-                                                                io_loop=io_loop,
-                                                                crypt='clear',
-                                                                master_uri=master_uri)
 
-        try:
-            # Ensure that the event subscriber is connected.
-            # If not, we won't get a response, so error out
-            if listen and not self.event.connect_pub(timeout=timeout):
-                raise SaltReqTimeoutError()
-            payload = yield channel.send(payload_kwargs, timeout=timeout)
-        except SaltReqTimeoutError:
-            raise SaltReqTimeoutError(
-                'Salt request timed out. The master is not responding. You '
-                'may need to run your command with `--async` in order to '
-                'bypass the congested event bus. With `--async`, the CLI tool '
-                'will print the job id (jid) and exit immediately without '
-                'listening for responses. You can then use '
-                '`salt-run jobs.lookup_jid` to look up the results of the job '
-                'in the job cache later.'
-            )
+        with salt.transport.client.AsyncReqChannel.factory(self.opts,
+                                                           io_loop=io_loop,
+                                                           crypt='clear',
+                                                           master_uri=master_uri) as channel:
+            try:
+                # Ensure that the event subscriber is connected.
+                # If not, we won't get a response, so error out
+                if listen and not self.event.connect_pub(timeout=timeout):
+                    raise SaltReqTimeoutError()
+                payload = yield channel.send(payload_kwargs, timeout=timeout)
+            except SaltReqTimeoutError:
+                raise SaltReqTimeoutError(
+                    'Salt request timed out. The master is not responding. You '
+                    'may need to run your command with `--async` in order to '
+                    'bypass the congested event bus. With `--async`, the CLI tool '
+                    'will print the job id (jid) and exit immediately without '
+                    'listening for responses. You can then use '
+                    '`salt-run jobs.lookup_jid` to look up the results of the job '
+                    'in the job cache later.'
+                )
 
-        if not payload:
-            # The master key could have changed out from under us! Regen
-            # and try again if the key has changed
-            key = self.__read_master_key()
-            if key == self.key:
+            if not payload:
+                # The master key could have changed out from under us! Regen
+                # and try again if the key has changed
+                key = self.__read_master_key()
+                if key == self.key:
+                    raise tornado.gen.Return(payload)
+                self.key = key
+                payload_kwargs['key'] = self.key
+                payload = yield channel.send(payload_kwargs)
+
+            error = payload.pop('error', None)
+            if error is not None:
+                if isinstance(error, dict):
+                    err_name = error.get('name', '')
+                    err_msg = error.get('message', '')
+                    if err_name == 'AuthenticationError':
+                        raise AuthenticationError(err_msg)
+                    elif err_name == 'AuthorizationError':
+                        raise AuthorizationError(err_msg)
+
+                raise PublishError(error)
+
+            if not payload:
                 raise tornado.gen.Return(payload)
-            self.key = key
-            payload_kwargs['key'] = self.key
-            payload = yield channel.send(payload_kwargs)
-
-        error = payload.pop('error', None)
-        if error is not None:
-            if isinstance(error, dict):
-                err_name = error.get('name', '')
-                err_msg = error.get('message', '')
-                if err_name == 'AuthenticationError':
-                    raise AuthenticationError(err_msg)
-                elif err_name == 'AuthorizationError':
-                    raise AuthorizationError(err_msg)
-
-            raise PublishError(error)
-
-        if not payload:
-            raise tornado.gen.Return(payload)
-
-        # We have the payload, let's get rid of the channel fast(GC'ed faster)
-        channel.close()
 
         raise tornado.gen.Return({'jid': payload['load']['jid'],
                                   'minions': payload['load']['minions']})
 
+    # pylint: disable=W1701
     def __del__(self):
         # This IS really necessary!
         # When running tests, if self.events is not destroyed, we leak 2
@@ -1919,6 +1889,7 @@ class LocalClient(object):
         if hasattr(self, 'event'):
             # The call below will take care of calling 'self.event.destroy()'
             del self.event
+    # pylint: enable=W1701
 
     def _clean_up_subscriptions(self, job_id):
         if self.opts.get('order_masters'):
@@ -1967,7 +1938,7 @@ class FunctionWrapper(dict):
             Run a remote call
             '''
             args = list(args)
-            for _key, _val in kwargs:
+            for _key, _val in kwargs.items():
                 args.append('{0}={1}'.format(_key, _val))
             return self.local.cmd(self.minion, key, args)
         return func
@@ -2046,7 +2017,8 @@ class Caller(object):
         func = self.sminion.functions[fun]
         args, kwargs = salt.minion.load_args_and_kwargs(
             func,
-            salt.utils.args.parse_input(args, kwargs=kwargs),)
+            salt.utils.args.parse_input(args),
+            kwargs)
         return func(*args, **kwargs)
 
 

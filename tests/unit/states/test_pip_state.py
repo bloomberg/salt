@@ -10,15 +10,15 @@
 # Import python libs
 from __future__ import absolute_import, print_function, unicode_literals
 import logging
+import sys
 
 # Import Salt Testing libs
 from tests.support.mixins import LoaderModuleMockMixin, SaltReturnAssertsMixin
 from tests.support.unit import skipIf, TestCase
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON, MagicMock, patch
+from tests.support.mock import MagicMock, patch
 
 # Import salt libs
 import salt.states.pip_state as pip_state
-from salt.utils.odict import OrderedDict
 
 # Import 3rd-party libs
 try:
@@ -31,7 +31,6 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 @skipIf(not HAS_PIP,
         'The \'pip\' library is not importable(installed system-wide)')
 class PipStateTest(TestCase, SaltReturnAssertsMixin, LoaderModuleMockMixin):
@@ -284,44 +283,29 @@ class PipStateTest(TestCase, SaltReturnAssertsMixin, LoaderModuleMockMixin):
                 {'test': ret}
             )
 
-    def test_mod_aggregate(self):
-        '''
-        Test to mod_aggregate function
-        '''
 
-        low = OrderedDict([('state', 'pip'),
-                           ('name', 'ipython'),
-                           ('__sls__', 'test.test_pip'),
-                           ('__env__', 'base'),
-                           ('__id__', 'ipython'),
-                           ('order', 10000),
-                           ('fun', 'installed')])
-        chunks = [OrderedDict([('state', 'pip'),
-                               ('name', 'ipython'),
-                               ('__sls__', 'test.test_pip'),
-                               ('__env__', 'base'),
-                               ('__id__', 'ipython'),
-                               ('order', 10000),
-                               ('fun', 'installed')]),
-                  OrderedDict([('state', 'pip'),
-                               ('name', 'pylint'),
-                               ('__sls__', 'test.test_pip'),
-                               ('__env__', 'base'),
-                               ('__id__', 'pylint'),
-                               ('order', 10001),
-                               ('fun', 'installed')])]
-        running = {}
-        expected_low = OrderedDict([('state', 'pip'),
-                                    ('name', 'ipython'),
-                                    ('__sls__', 'test.test_pip'),
-                                    ('__env__', 'base'),
-                                    ('__id__', 'ipython'),
-                                    ('order', 10000),
-                                    ('fun', 'installed'),
-                                    ('pkgs', ['ipython', 'pylint'])])
+class PipStateUtilsTest(TestCase):
 
-        mock_tag = MagicMock(side_effect=['pip_|-ipython_|-ipython_|-installed',
-                                          'pip_|-pylint_|-pylint_|-installed'])
-        with patch.dict(pip_state.__utils__, {'state.gen_tag': mock_tag}):
-            self.assertDictEqual(pip_state.mod_aggregate(low, chunks, running),
-                                 expected_low)
+    def test_has_internal_exceptions_mod_function(self):
+        assert pip_state.pip_has_internal_exceptions_mod('10.0')
+        assert pip_state.pip_has_internal_exceptions_mod('18.1')
+        assert not pip_state.pip_has_internal_exceptions_mod('9.99')
+
+    def test_has_exceptions_mod_function(self):
+        assert pip_state.pip_has_exceptions_mod('1.0')
+        assert not pip_state.pip_has_exceptions_mod('0.1')
+        assert not pip_state.pip_has_exceptions_mod('10.0')
+
+    def test_pip_purge_method_with_pip(self):
+        mock_modules = sys.modules.copy()
+        mock_modules.pop('pip', None)
+        mock_modules['pip'] = object()
+        with patch('sys.modules', mock_modules):
+            pip_state.purge_pip()
+        assert 'pip' not in mock_modules
+
+    def test_pip_purge_method_without_pip(self):
+        mock_modules = sys.modules.copy()
+        mock_modules.pop('pip', None)
+        with patch('sys.modules', mock_modules):
+            pip_state.purge_pip()

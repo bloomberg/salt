@@ -13,6 +13,7 @@ import os
 import hashlib
 import time
 import shutil
+import warnings
 
 # Import Salt Testing libs
 from tests.support.unit import expectedFailure, skipIf, TestCase
@@ -20,6 +21,7 @@ from tests.support.runtests import RUNTIME_VARS
 from tests.support.events import eventpublisher_process, eventsender_process
 
 # Import salt libs
+import salt.config
 import salt.utils.event
 import salt.utils.stringutils
 
@@ -31,6 +33,7 @@ import zmq.eventloop.ioloop
 if not hasattr(zmq.eventloop.ioloop, 'ZMQIOLoop'):
     zmq.eventloop.ioloop.ZMQIOLoop = zmq.eventloop.ioloop.IOLoop
 from salt.ext.six.moves import range  # pylint: disable=import-error,redefined-builtin
+from tests.support.processes import terminate_process
 
 NO_LONG_IPC = False
 if getattr(zmq, 'IPC_PATH_MAX_LEN', 103) <= 103:
@@ -325,3 +328,27 @@ class TestAsyncEventPublisher(AsyncTestCase):
         self.assertEqual(self.tag, 'evt1')
         self.data.pop('_stamp')  # drop the stamp
         self.assertEqual(self.data, {'data': 'foo1'})
+
+
+class TestEventReturn(TestCase):
+
+    def test_event_return(self):
+        # Once salt is py3 only, the warnings part of this test no longer applies
+        evt = None
+        try:
+            with warnings.catch_warnings(record=True) as w:
+                # Cause all warnings to always be triggered.
+                warnings.simplefilter("always")
+                evt = None
+                try:
+                    evt = salt.utils.event.EventReturn(salt.config.DEFAULT_MASTER_OPTS.copy())
+                    evt.start()
+                except TypeError as exc:
+                    if 'object' in str(exc):
+                        self.fail('\'{}\' TypeError should have not been raised'.format(exc))
+                for warning in w:
+                    if warning.category is DeprecationWarning:
+                        assert 'object() takes no parameters' not in warning.message
+        finally:
+            if evt is not None:
+                terminate_process(evt.pid, kill_children=True)

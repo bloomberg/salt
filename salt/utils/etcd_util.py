@@ -75,7 +75,6 @@ class EtcdUtilWatchTimeout(Exception):
     """
     A watch timed out without returning a result
     """
-    pass
 
 
 class EtcdClient(object):
@@ -220,20 +219,20 @@ class EtcdClient(object):
         except etcd.EtcdException as err:
             # EtcdValueError inherits from ValueError, so we don't want to accidentally
             # catch this below on ValueError and give a bogus error message
-            log.error('etcd: %s', err)
+            log.error("etcd: {0}".format(err))
             raise
         except ValueError:
             # python-etcd doesn't fully support python 2.6 and ends up throwing this for *any* exception because
             # it uses the newer {} format syntax
             log.error("etcd: error. python-etcd does not fully support python 2.6, no error information available")
             raise
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-except
             log.error('etcd: uncaught exception %s', err)
             raise
         return result
 
     def _flatten(self, data, path=''):
-        if not data:
+        if len(data.keys()) == 0:
             return {path: {}}
         path = path.strip('/')
         flat = {}
@@ -282,7 +281,7 @@ class EtcdClient(object):
         except MaxRetryError as err:
             log.error("etcd: Could not connect to etcd server: %s", err)
             return None
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-except
             log.error('etcd: uncaught exception %s', err)
             raise
 
@@ -307,7 +306,7 @@ class EtcdClient(object):
         except MaxRetryError as err:
             log.error("etcd: Could not connect to etcd server: %s", err)
             return None
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-except
             log.error('etcd: uncaught exception %s', err)
             raise
 
@@ -348,7 +347,7 @@ class EtcdClient(object):
         except MaxRetryError as err:
             log.error('etcd: Could not connect to etcd server: %s', err)
             return None
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-except
             log.error('etcd: uncaught exception %s', err)
             raise
 

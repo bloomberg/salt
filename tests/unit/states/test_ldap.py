@@ -17,8 +17,7 @@ import salt.states.ldap
 from salt.utils.oset import OrderedSet
 
 from tests.support.mixins import LoaderModuleMockMixin
-from tests.support.unit import skipIf, TestCase
-from tests.support.mock import NO_MOCK, NO_MOCK_REASON
+from tests.support.unit import TestCase
 
 # emulates the LDAP database.  each key is the DN of an entry and it
 # maps to a dict which maps attribute names to sets of values.
@@ -75,7 +74,7 @@ def _dummy_search(connect_spec, base, scope):
         return {}
     return {base: dict(((attr, list(db[base][attr]))
                         for attr in db[base]
-                        if db[base][attr]))}
+                        if len(db[base][attr])))}
 
 
 def _dummy_add(connect_spec, dn, attributes):
@@ -164,7 +163,6 @@ def _dump_db(d=None):
                  for dn in d))
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 class LDAPTestCase(TestCase, LoaderModuleMockMixin):
 
     def setup_loader_modules(self):
@@ -192,7 +190,7 @@ class LDAPTestCase(TestCase, LoaderModuleMockMixin):
                 elif dn in expected_db:
                     new[dn].pop(attr, None)
                     expected_db[dn].pop(attr, None)
-            if not expected_db.get(dn):
+            if not expected_db.get(dn, {}):
                 new.pop(dn, None)
                 expected_db.pop(dn, None)
         if delete_others:

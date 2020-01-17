@@ -97,16 +97,6 @@ def __virtual__():
     return __virtualname__
 
 
-def _validate_response_code(response_code_to_check, cookie_to_logout=None):
-    formatted_response_code = str(response_code_to_check)
-    if formatted_response_code not in ['200', '201', '202', '204']:
-        if cookie_to_logout:
-            logout(cookie_to_logout)
-        log.error("Received error HTTP status code: %s", formatted_response_code)
-        raise salt.exceptions.CommandExecutionError(
-            "Did not receive a valid response from host.")
-
-
 def init(opts):
     '''
     This function gets called when the proxy starts up.
@@ -160,11 +150,7 @@ def set_config_modify(dn=None, inconfig=None, hierarchical=False):
                                 decode=True,
                                 verify_ssl=False,
                                 raise_error=True,
-                                status=True,
                                 headers=DETAILS['headers'])
-
-    _validate_response_code(r['status'], cookie)
-
     answer = re.findall(r'(<[\s\S.]*>)', r['text'])[0]
     items = ET.fromstring(answer)
     logout(cookie)
@@ -193,15 +179,11 @@ def get_config_resolver_class(cid=None, hierarchical=False):
                                 decode=True,
                                 verify_ssl=False,
                                 raise_error=True,
-                                status=True,
                                 headers=DETAILS['headers'])
-
-    _validate_response_code(r['status'], cookie)
 
     answer = re.findall(r'(<[\s\S.]*>)', r['text'])[0]
     items = ET.fromstring(answer)
     logout(cookie)
-
     for item in items:
         ret[item.tag] = prepare_return(item)
     return ret
@@ -220,11 +202,7 @@ def logon():
                                 decode=True,
                                 verify_ssl=False,
                                 raise_error=False,
-                                status=True,
                                 headers=DETAILS['headers'])
-
-    _validate_response_code(r['status'])
-
     answer = re.findall(r'(<[\s\S.]*>)', r['text'])[0]
     items = ET.fromstring(answer)
     for item in items.attrib:
@@ -284,9 +262,7 @@ def grains():
         try:
             compute_rack = get_config_resolver_class('computeRackUnit', False)
             DETAILS['grains_cache'] = compute_rack['outConfigs']['computeRackUnit']
-        except salt.exceptions.CommandExecutionError:
-            pass
-        except Exception as err:
+        except Exception as err:  # pylint: disable=broad-except
             log.error(err)
     return DETAILS['grains_cache']
 
@@ -306,9 +282,7 @@ def ping():
     try:
         cookie = logon()
         logout(cookie)
-    except salt.exceptions.CommandExecutionError:
-        return False
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-except
         log.debug(err)
         return False
     return True

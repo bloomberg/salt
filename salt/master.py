@@ -31,7 +31,6 @@ import tornado.gen  # pylint: disable=F0401
 
 # Import salt libs
 import salt.crypt
-import salt.cli.batch_async
 import salt.client
 import salt.client.ssh.client
 import salt.exceptions
@@ -139,7 +138,7 @@ class SMaster(object):
         return salt.daemons.masterapi.access_keys(self.opts)
 
 
-class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class Maintenance(salt.utils.process.SignalHandlingProcess):
     '''
     A generalized maintenance process which performs maintenance routines.
     '''
@@ -162,7 +161,6 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['opts'],
             log_queue=state['log_queue'],
@@ -226,7 +224,9 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
 
         # Make Start Times
         last = int(time.time())
+        last_git_pillar_update = last
 
+        git_pillar_update_interval = self.opts.get('git_pillar_update_interval', 0)
         old_present = set()
         while True:
             now = int(time.time())
@@ -234,8 +234,9 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
                 salt.daemons.masterapi.clean_old_jobs(self.opts)
                 salt.daemons.masterapi.clean_expired_tokens(self.opts)
                 salt.daemons.masterapi.clean_pub_auth(self.opts)
-                salt.daemons.masterapi.clean_proc_dir(self.opts)
-            self.handle_git_pillar()
+            if (now - last_git_pillar_update) >= git_pillar_update_interval:
+                last_git_pillar_update = now
+                self.handle_git_pillar()
             self.handle_schedule()
             self.handle_key_cache()
             self.handle_presence(old_present)
@@ -316,7 +317,7 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
         try:
             for pillar in self.git_pillar:
                 pillar.fetch_remotes()
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error('Exception caught while updating git_pillar',
                       exc_info=True)
 
@@ -330,8 +331,9 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
             # the loop_interval setting
             if self.schedule.loop_interval < self.loop_interval:
                 self.loop_interval = self.schedule.loop_interval
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error('Exception %s occurred in scheduled job', exc)
+        self.schedule.cleanup_subprocesses()
 
     def handle_presence(self, old_present):
         '''
@@ -354,7 +356,7 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
             old_present.update(present)
 
 
-class FileserverUpdate(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class FileserverUpdate(salt.utils.process.SignalHandlingProcess):
     '''
     A process from which to update any dynamic fileserver backends
     '''
@@ -371,7 +373,6 @@ class FileserverUpdate(salt.utils.process.SignalHandlingMultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['opts'],
             log_queue=state['log_queue'],
@@ -458,7 +459,7 @@ class FileserverUpdate(salt.utils.process.SignalHandlingMultiprocessingProcess):
                         args = ()
 
                     update_func(*args)
-                except Exception as exc:
+                except Exception as exc:  # pylint: disable=broad-except
                     log.exception(
                         'Uncaught exception while updating %s fileserver '
                         'cache', backend_name
@@ -718,7 +719,7 @@ class Master(SMaster):
                     _tmp = __import__(mod, globals(), locals(), [cls], -1)
                     cls = _tmp.__getattribute__(cls)
                     self.process_manager.add_process(cls, args=(self.opts,))
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     log.error('Error creating ext_processes process: %s', proc)
 
             if HAS_HALITE and 'halite' in self.opts:
@@ -783,7 +784,7 @@ class Master(SMaster):
         sys.exit(0)
 
 
-class Halite(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class Halite(salt.utils.process.SignalHandlingProcess):
     '''
     Manage the Halite server
     '''
@@ -800,7 +801,6 @@ class Halite(salt.utils.process.SignalHandlingMultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['hopts'],
             log_queue=state['log_queue'],
@@ -822,7 +822,7 @@ class Halite(salt.utils.process.SignalHandlingMultiprocessingProcess):
         halite.start(self.hopts)
 
 
-class ReqServer(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class ReqServer(salt.utils.process.SignalHandlingProcess):
     '''
     Starts up the master request server, minions send results to this
     interface.
@@ -849,7 +849,6 @@ class ReqServer(salt.utils.process.SignalHandlingMultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['opts'],
             state['key'],
@@ -948,11 +947,13 @@ class ReqServer(salt.utils.process.SignalHandlingMultiprocessingProcess):
             self.process_manager.send_signal_to_processes(signum)
             self.process_manager.kill_children()
 
+    # pylint: disable=W1701
     def __del__(self):
         self.destroy()
+    # pylint: enable=W1701
 
 
-class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
+class MWorker(salt.utils.process.SignalHandlingProcess):
     '''
     The worker multiprocess instance to manage the backend operations for the
     salt master.
@@ -983,7 +984,7 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
         self.mkey = mkey
         self.key = key
         self.k_mtime = 0
-        self.stats = collections.defaultdict(lambda: {'mean': 0, 'latency': 0, 'runs': 0})
+        self.stats = collections.defaultdict(lambda: {'mean': 0, 'runs': 0})
         self.stat_clock = time.time()
 
     # We need __setstate__ and __getstate__ to also pickle 'SMaster.secrets'.
@@ -992,7 +993,6 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
     # These methods are only used when pickling so will not be used on
     # non-Windows platforms.
     def __setstate__(self, state):
-        self._is_child = True
         super(MWorker, self).__init__(
             log_queue=state['log_queue'],
             log_queue_level=state['log_queue_level']
@@ -1065,16 +1065,18 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
                'clear': self._handle_clear}[key](load)
         raise tornado.gen.Return(ret)
 
-    def _post_stats(self, stats):
+    def _post_stats(self, start, cmd):
         '''
-        Fire events with stat info if it's time
+        Calculate the master stats and fire events with stat info
         '''
-        end_time = time.time()
-        if end_time - self.stat_clock > self.opts['master_stats_event_iter']:
+        end = time.time()
+        duration = end - start
+        self.stats[cmd]['mean'] = (self.stats[cmd]['mean'] * (self.stats[cmd]['runs'] - 1) + duration) / self.stats[cmd]['runs']
+        if end - self.stat_clock > self.opts['master_stats_event_iter']:
             # Fire the event with the stats and wipe the tracker
-            self.aes_funcs.event.fire_event({'time': end_time - self.stat_clock, 'worker': self.name, 'stats': stats}, tagify(self.name, 'stats'))
-            self.stats = collections.defaultdict(lambda: {'mean': 0, 'latency': 0, 'runs': 0})
-            self.stat_clock = end_time
+            self.aes_funcs.event.fire_event({'time': end - self.stat_clock, 'worker': self.name, 'stats': self.stats}, tagify(self.name, 'stats'))
+            self.stats = collections.defaultdict(lambda: {'mean': 0, 'runs': 0})
+            self.stat_clock = end
 
     def _handle_clear(self, load):
         '''
@@ -1090,10 +1092,10 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             return False
         if self.opts['master_stats']:
             start = time.time()
+            self.stats[cmd]['runs'] += 1
         ret = getattr(self.clear_funcs, cmd)(load), {'fun': 'send_clear'}
         if self.opts['master_stats']:
-            stats = salt.utils.event.update_stats(self.stats, start, load)
-            self._post_stats(stats)
+            self._post_stats(start, cmd)
         return ret
 
     def _handle_aes(self, data):
@@ -1113,6 +1115,7 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             return False
         if self.opts['master_stats']:
             start = time.time()
+            self.stats[cmd]['runs'] += 1
 
         def run_func(data):
             return self.aes_funcs.run_func(data['cmd'], data)
@@ -1123,8 +1126,7 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             ret = run_func(data)
 
         if self.opts['master_stats']:
-            stats = salt.utils.event.update_stats(self.stats, start, data)
-            self._post_stats(stats)
+            self._post_stats(start, cmd)
         return ret
 
     def run(self):
@@ -1445,16 +1447,18 @@ class AESFuncs(object):
             return False
         if not salt.utils.verify.valid_id(self.opts, load['id']):
             return False
+        file_recv_max_size = 1024*1024 * self.opts['file_recv_max_size']
+
         if 'loc' in load and load['loc'] < 0:
             log.error('Invalid file pointer: load[loc] < 0')
             return False
 
-        if len(load['data']) + load.get('loc', 0) > self.opts['file_recv_max_size'] * 0x100000:
+        if len(load['data']) + load.get('loc', 0) > file_recv_max_size:
             log.error(
                 'file_recv_max_size limit of %d MB exceeded! %s will be '
                 'truncated. To successfully push this file, adjust '
                 'file_recv_max_size to an integer (in MB) large enough to '
-                'accommodate it.', self.opts['file_recv_max_size'], load['path']
+                'accommodate it.', file_recv_max_size, load['path']
             )
             return False
         if 'tok' not in load:
@@ -1621,7 +1625,7 @@ class AESFuncs(object):
                 log.info('Failed to verify event signature from minion %s.', load['id'])
                 if self.opts['drop_messages_signature_fail']:
                     log.critical(
-                        'Drop_messages_signature_fail is enabled, dropping '
+                        'drop_messages_signature_fail is enabled, dropping '
                         'message from %s', load['id']
                     )
                     return False
@@ -1837,7 +1841,7 @@ class AESFuncs(object):
                     'Master function call %s took %s seconds',
                     func, time.time() - start
                 )
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 ret = ''
                 log.error('Error in function %s:\n', func, exc_info=True)
         else:
@@ -1940,7 +1944,7 @@ class ClearFuncs(object):
             return runner_client.asynchronous(fun,
                                               clear_load.get('kwarg', {}),
                                               username)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error('Exception occurred while introspecting %s: %s', fun, exc)
             return {'error': {'name': exc.__class__.__name__,
                               'args': exc.args,
@@ -2005,7 +2009,7 @@ class ClearFuncs(object):
             self.event.fire_event(data, tagify([jid, 'ret'], 'wheel'))
             return {'tag': tag,
                     'data': data}
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.error('Exception occurred while introspecting %s: %s', fun, exc)
             data['return'] = 'Exception occurred in wheel {0}: {1}: {2}'.format(
                              fun,
@@ -2035,30 +2039,6 @@ class ClearFuncs(object):
         if 'token' not in clear_load:
             return False
         return self.loadauth.get_tok(clear_load['token'])
-
-    def publish_batch(self, clear_load, extra, minions, missing):
-        batch_load = {}
-        batch_load.update(clear_load)
-        import salt.cli.batch_async
-        batch = salt.cli.batch_async.BatchAsync(
-            self.local.opts,
-            functools.partial(self._prep_jid, clear_load, {}),
-            batch_load
-        )
-        ioloop = tornado.ioloop.IOLoop.current()
-
-        self._prep_pub(minions, batch.batch_jid, clear_load, extra, missing)
-
-        ioloop.add_callback(batch.start)
-
-        return {
-            'enc': 'clear',
-            'load': {
-                'jid': batch.batch_jid,
-                'minions': minions,
-                'missing': missing
-            }
-        }
 
     def publish(self, clear_load):
         '''
@@ -2151,9 +2131,6 @@ class ClearFuncs(object):
                         'error': 'Master could not resolve minions for target {0}'.format(clear_load['tgt'])
                     }
                 }
-        if extra.get('batch', None):
-            return self.publish_batch(clear_load, extra, minions, missing)
-
         jid = self._prep_jid(clear_load, extra)
         if jid is None:
             return {'enc': 'clear',
@@ -2292,7 +2269,7 @@ class ClearFuncs(object):
             if save_load_func:
                 try:
                     self.mminion.returners[fstr](clear_load['jid'], clear_load, minions=minions)
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     log.critical(
                         'The specified returner threw a stack trace:\n',
                         exc_info=True
@@ -2308,7 +2285,7 @@ class ClearFuncs(object):
                 '"%s" does not have a save_load function!',
                 self.opts['master_job_cache']
             )
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             log.critical(
                 'The specified returner threw a stack trace:\n',
                 exc_info=True

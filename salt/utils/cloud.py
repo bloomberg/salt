@@ -46,9 +46,6 @@ except ImportError:
 try:
     import winrm
     from winrm.exceptions import WinRMTransportError
-    from winrm.exceptions import InvalidCredentialsError
-    from requests.exceptions import ReadTimeout
-    from requests.exceptions import ConnectionError
 
     HAS_WINRM = True
 except ImportError:
@@ -627,7 +624,7 @@ def bootstrap(vm_, opts=None):
         'event',
         'executing deploy script',
         'salt/cloud/{0}/deploying'.format(vm_['name']),
-        args={'kwargs': salt.utils.data.simple_types_filter(event_kwargs)},
+        args={'kwargs': event_kwargs},
         sock_dir=opts.get(
             'sock_dir',
             os.path.join(__opts__['sock_dir'], 'master')),
@@ -712,7 +709,7 @@ def wait_for_fun(fun, timeout=900, **kwargs):
             response = fun(**kwargs)
             if not isinstance(response, bool):
                 return response
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.debug('Caught exception in wait_for_fun: %s', exc)
             time.sleep(1)
             log.debug('Retrying function %s on  (try %s)', fun, trycount)
@@ -1017,7 +1014,7 @@ def wait_for_psexecsvc(host, port, username, password, timeout=900):
             stdout, stderr, ret_code = run_psexec_command(
                 'cmd.exe', '/c hostname', host, username, password, port=port
             )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.exception("Unable to execute command")
         if ret_code == 0:
             log.debug('psexec connected...')
@@ -1025,8 +1022,12 @@ def wait_for_psexecsvc(host, port, username, password, timeout=900):
         if time.time() - start > timeout:
             return False
         log.debug(
-            'Retrying psexec connection to host %s on port %s (try %s)',
-            host, port, try_count
+            'Retrying psexec connection to host {0} on port {1} '
+            '(try {2})'.format(
+                host,
+                port,
+                try_count
+            )
         )
         time.sleep(1)
 
@@ -1067,24 +1068,6 @@ def wait_for_winrm(host, port, username, password, timeout=900, use_ssl=True, ve
             log.debug('Return code was %s', r.status_code)
         except WinRMTransportError as exc:
             log.debug('Caught exception in wait_for_winrm: %s', exc)
-        except InvalidCredentialsError as exc:
-            log.error((
-                'Caught Invalid Credentials error in wait_for_winrm.  '
-                'You may have an incorrect username/password, '
-                'the new minion\'s WinRM configuration is not correct, '
-                'the customization spec has not finished, '
-                'or we are waiting for an account rename policy to take effect.  '
-                'Connection attempts will continue to be made until the WinRM timeout '
-                'has been exceeded.'
-            ))
-        except ReadTimeout as exc:
-            log.error('Caught Read Timeout while waiting for winrm.')
-        except ConnectionError as exc:
-            log.error((
-                'Caught Connection Error while waiting for winrm.  '
-                'Connection attempts will continue to be made until the WinRM timeout '
-                'has been exceeded.'
-            ))
 
         if time.time() - start > timeout:
             log.error('WinRM connection timed out: %s', timeout)
@@ -1135,7 +1118,7 @@ def validate_windows_cred(host,
             stdout, stderr, ret_code = run_psexec_command(
                 'cmd.exe', '/c hostname', host, username, password, port=445
             )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             log.exception("Exceoption while executing psexec")
         if ret_code == 0:
             break
@@ -1198,7 +1181,7 @@ def wait_for_passwd(host, port=22, ssh_timeout=15, username='root',
             return False
         except SaltCloudPasswordError:
             raise
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             if trycount >= maxtries:
                 return False
             time.sleep(trysleep)
@@ -1301,7 +1284,7 @@ def deploy_windows(host,
                     'C$',
                     conn=smb_conn,
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 log.debug("Exception copying master_sign.pub file %s to minion", master_sign_pub_file)
 
         # Copy over win_installer
@@ -1516,7 +1499,7 @@ def deploy_script(host,
                     )
             if sudo:
                 comps = tmp_dir.lstrip('/').rstrip('/').split('/')
-                if comps:
+                if len(comps) > 0:
                     if len(comps) > 1 or comps[0] != 'tmp':
                         ret = root_cmd(
                             'chown {0} "{1}"'.format(username, tmp_dir),
@@ -2008,8 +1991,6 @@ def fire_event(key, msg, tag, sock_dir, args=None, transport='zeromq'):
             else:
                 args = {key: msg}
             event.fire_event(args, tag)
-        finally:
-            event.destroy()
 
         # https://github.com/zeromq/pyzmq/issues/173#issuecomment-4037083
         # Assertion failed: get_load () == 0 (poller_base.cpp:32)
@@ -2293,7 +2274,7 @@ def win_cmd(command, **kwargs):
         proc.poll_and_read_until_finish()
         proc.communicate()
         return proc.returncode
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-except
         log.exception('Failed to execute command \'%s\'', logging_command)
     # Signal an error
     return 1
@@ -2304,8 +2285,6 @@ def winrm_cmd(session, command, flags, **kwargs):
     Wrapper for commands to be run against Windows boxes using WinRM.
     '''
     log.debug('Executing WinRM command: %s %s', command, flags)
-    # rebuild the session to ensure we haven't timed out
-    session.protocol.transport.build_session()
     r = session.run_cmd(command, flags)
     return r.status_code
 
@@ -2471,7 +2450,7 @@ def remove_sshkey(host, known_hosts=None):
                 known_hosts = '{0}/.ssh/known_hosts'.format(
                     pwd.getpwuid(os.getuid()).pwd_dir
                 )
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
 
     if known_hosts is not None:
@@ -2650,9 +2629,7 @@ def cachedir_index_add(minion_id, profile, driver, provider, base=None):
     if os.path.exists(index_file):
         mode = 'rb' if six.PY3 else 'r'
         with salt.utils.files.fopen(index_file, mode) as fh_:
-            index = salt.utils.data.decode(
-                salt.utils.msgpack.msgpack.load(
-                    fh_, encoding=MSGPACK_ENCODING))
+            index = salt.utils.data.decode(salt.utils.msgpack.msgpack.load(fh_, encoding=MSGPACK_ENCODING))
     else:
         index = {}
 
@@ -2686,8 +2663,7 @@ def cachedir_index_del(minion_id, base=None):
     if os.path.exists(index_file):
         mode = 'rb' if six.PY3 else 'r'
         with salt.utils.files.fopen(index_file, mode) as fh_:
-            index = salt.utils.data.decode(
-                salt.utils.msgpack.load(fh_, encoding=MSGPACK_ENCODING))
+            index = salt.utils.data.decode(salt.utils.msgpack.load(fh_, encoding=MSGPACK_ENCODING))
     else:
         return
 

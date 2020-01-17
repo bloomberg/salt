@@ -10,12 +10,10 @@ import os
 import tempfile
 
 # Import Salt Testing libs
-from tests.integration import AdaptedConfigurationTestCaseMixin
-from tests.support.mixins import LoaderModuleMockMixin
-from tests.support.unit import TestCase, skipIf
-from tests.support.mock import patch, NO_MOCK, NO_MOCK_REASON
+from tests.support.mixins import AdaptedConfigurationTestCaseMixin, LoaderModuleMockMixin
+from tests.support.unit import TestCase
+from tests.support.mock import patch
 from tests.support.runtests import RUNTIME_VARS
-from tests.support.paths import TMP
 
 # Import Salt libs
 import salt.fileserver.roots as roots
@@ -33,7 +31,6 @@ UNICODE_FILENAME = 'питон.txt'
 UNICODE_DIRNAME = UNICODE_ENVNAME = 'соль'
 
 
-@skipIf(NO_MOCK, NO_MOCK_REASON)
 class RootsTest(TestCase, AdaptedConfigurationTestCaseMixin, LoaderModuleMockMixin):
 
     def setup_loader_modules(self):
@@ -180,7 +177,7 @@ class RootsTest(TestCase, AdaptedConfigurationTestCaseMixin, LoaderModuleMockMix
                 self.opts['file_roots'] = orig_file_roots
 
     def test_dynamic_file_roots(self):
-        dyn_root_dir = tempfile.mkdtemp(dir=TMP)
+        dyn_root_dir = tempfile.mkdtemp(dir=RUNTIME_VARS.TMP)
         top_sls = os.path.join(dyn_root_dir, 'top.sls')
         with salt.utils.files.fopen(top_sls, 'w') as fp_:
             fp_.write("{{saltenv}}:\n  '*':\n    - dynamo\n")

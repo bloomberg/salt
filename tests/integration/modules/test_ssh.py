@@ -20,9 +20,6 @@ import salt.utils.platform
 # Import 3rd-party libs
 from tornado.httpclient import HTTPClient
 
-SUBSALT_DIR = os.path.join(RUNTIME_VARS.TMP, 'subsalt')
-AUTHORIZED_KEYS = os.path.join(SUBSALT_DIR, 'authorized_keys')
-KNOWN_HOSTS = os.path.join(SUBSALT_DIR, 'known_hosts')
 GITHUB_FINGERPRINT = '9d:38:5b:83:a9:17:52:92:56:1a:5e:c4:d4:81:8e:0a:ca:51:a2:64:f1:74:20:11:2e:f8:8a:c3:a1:39:49:8f'
 
 
@@ -76,11 +73,11 @@ class SSHModuleTest(ModuleCase):
         '''
         shutil.copyfile(
              os.path.join(RUNTIME_VARS.FILES, 'ssh', 'authorized_keys'),
-             AUTHORIZED_KEYS)
+             self.authorized_keys)
         user = 'root'
         if salt.utils.platform.is_windows():
             user = 'Administrator'
-        ret = self.run_function('ssh.auth_keys', [user, AUTHORIZED_KEYS])
+        ret = self.run_function('ssh.auth_keys', [user, self.authorized_keys])
         self.assertEqual(len(list(ret.items())), 1)  # exactly one key is found
         key_data = list(ret.items())[0][1]
         try:

@@ -69,13 +69,8 @@ class Beacon(object):
                         self._remove_list_item(config[mod], 'enabled')
 
             log.trace('Beacon processing: %s', mod)
-            beacon_name = None
-            if self._determine_beacon_config(current_beacon_config, 'beacon_module'):
-                beacon_name = current_beacon_config['beacon_module']
-            else:
-                beacon_name = mod
-            fun_str = '{0}.beacon'.format(beacon_name)
-            validate_str = '{0}.validate'.format(beacon_name)
+            fun_str = '{0}.beacon'.format(mod)
+            validate_str = '{0}.validate'.format(mod)
             if fun_str in self.beacons:
                 runonce = self._determine_beacon_config(current_beacon_config, 'run_once')
                 interval = self._determine_beacon_config(current_beacon_config, 'interval')
@@ -93,7 +88,7 @@ class Beacon(object):
                         if re.match('state.*', job['fun']):
                             is_running = True
                     if is_running:
-                        close_str = '{0}.close'.format(beacon_name)
+                        close_str = '{0}.close'.format(mod)
                         if close_str in self.beacons:
                             log.info('Closing beacon %s. State run in progress.', mod)
                             self.beacons[close_str](b_config[mod])
@@ -121,9 +116,7 @@ class Beacon(object):
                         tag += data.pop('tag')
                     if 'id' not in data:
                         data['id'] = self.opts['id']
-                    ret.append({'tag': tag,
-                                'data': data,
-                                'beacon_name': beacon_name})
+                    ret.append({'tag': tag, 'data': data})
                 if runonce:
                     self.disable_beacon(mod)
             else:
@@ -178,7 +171,7 @@ class Beacon(object):
         '''
 
         indexes = [index for index, item in enumerate(beacon_config) if label in item]
-        if not indexes:
+        if len(indexes) < 1:
             return -1
         else:
             return indexes[0]
@@ -237,7 +230,8 @@ class Beacon(object):
         include_opts:   Whether to include beacons that are
                         configured in opts, default is True.
         '''
-        beacons = self._get_beacons(include_pillar, include_opts)
+        beacons = self._get_beacons(include_pillar=include_pillar,
+                                    include_opts=include_opts)
 
         # Fire the complete event back along with the list of beacons
         with salt.utils.event.get_event('minion', opts=self.opts) as evt:
@@ -441,14 +435,8 @@ class Beacon(object):
         Reset the beacons to defaults
         '''
         self.opts['beacons'] = {}
-
-        comment = 'Beacon Reset'
-        complete = True
-
-        # Fire the complete event back along with updated list of beacons
         evt = salt.utils.event.get_event('minion', opts=self.opts)
-        evt.fire_event({'complete': complete, 'comment': comment,
+        evt.fire_event({'complete': True, 'comment': 'Beacons have been reset',
                         'beacons': self.opts['beacons']},
                        tag='/salt/minion/minion_beacon_reset_complete')
-
         return True

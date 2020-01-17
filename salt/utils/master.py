@@ -29,7 +29,7 @@ import salt.payload
 from salt.exceptions import SaltException
 import salt.config
 from salt.utils.cache import CacheCli as cache_cli
-from salt.utils.process import MultiprocessingProcess
+from salt.utils.process import Process
 
 # pylint: disable=import-error
 try:
@@ -509,7 +509,7 @@ class CacheTimer(Thread):
                 count = 0
 
 
-class CacheWorker(MultiprocessingProcess):
+class CacheWorker(Process):
     '''
     Worker for ConnectedCache which runs in its
     own process to prevent blocking of ConnectedCache
@@ -527,7 +527,6 @@ class CacheWorker(MultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['opts'],
             log_queue=state['log_queue'],
@@ -552,7 +551,7 @@ class CacheWorker(MultiprocessingProcess):
         log.debug('ConCache CacheWorker update finished')
 
 
-class ConnectedCache(MultiprocessingProcess):
+class ConnectedCache(Process):
     '''
     Provides access to all minions ids that the master has
     successfully authenticated. The cache is cleaned up regularly by
@@ -590,7 +589,6 @@ class ConnectedCache(MultiprocessingProcess):
     # We do this so that __init__ will be invoked on Windows in the child
     # process so that a register_after_fork() equivalent will work on Windows.
     def __setstate__(self, state):
-        self._is_child = True
         self.__init__(
             state['opts'],
             log_queue=state['log_queue'],

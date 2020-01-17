@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 '''
-XML file mangler
+XML file manager
 
-.. versionadded:: Neon
+.. versionadded:: 3000
 '''
 from __future__ import absolute_import, print_function, unicode_literals
 

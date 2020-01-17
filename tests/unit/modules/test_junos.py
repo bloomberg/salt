@@ -4,13 +4,11 @@
 '''
 # Import python libs
 from __future__ import absolute_import, print_function, unicode_literals
-import os
 
 # Import test libs
 from tests.support.mixins import LoaderModuleMockMixin, XMLEqualityMixin
 from tests.support.mock import patch, mock_open, PropertyMock, call, ANY
 from tests.support.unit import skipIf, TestCase
-from salt.ext import six
 
 # Import 3rd-party libs
 try:
@@ -23,9 +21,7 @@ try:
     from jnpr.junos.utils.sw import SW
     from jnpr.junos.device import Device
     import jxmlease  # pylint: disable=unused-import
-    import jnpr.junos.op as tables_dir
-    from jnpr.junos.exception import ConnectClosedError, LockError, \
-        UnlockError
+    from jnpr.junos.exception import LockError, UnlockError
     HAS_JUNOS = True
 except ImportError:
     HAS_JUNOS = False
@@ -1420,9 +1416,8 @@ class Test_Junos_Module(TestCase, LoaderModuleMockMixin, XMLEqualityMixin):
 
     def test_virtual_proxy_unavailable(self):
         with patch.dict(junos.__opts__, {}):
-            res = (False, 'The junos or dependent module could not be loaded: '
-                          'junos-eznc or jxmlease or or yamlordereddictloader or '
-                          'proxy could not be loaded.')
+            res = (False, 'The junos module could not be '
+                          'loaded: junos-eznc or jxmlease or proxy could not be loaded.')
             self.assertEqual(junos.__virtual__(), res)
 
     def test_virtual_all_true(self):
@@ -1697,92 +1692,3 @@ class Test_Junos_Module(TestCase, LoaderModuleMockMixin, XMLEqualityMixin):
             mock_check.side_effect = Exception
             ret = junos.commit_check()
             self.assertEqual(ret, ret_exp)
-
-    def test_get_table_wrong_path(self):
-        table = 'ModuleTable'
-        file = 'sample.yml'
-        path = '/path/to/file'
-        ret_exp = {'out': False, 'hostname': '1.1.1.1',
-                   'tablename': 'ModuleTable',
-                   'message': 'Given table file {} cannot be located'.format(file)}
-        with patch('jnpr.junos.factory.FactoryLoader.load') as mock_load:
-            ret = junos.get_table(table, file, path)
-            self.assertEqual(ret, ret_exp)
-            mock_load.assert_not_called()
-
-    def test_get_table_no_path_no_file(self):
-        table = 'ModuleTable'
-        file = 'inventory.yml'
-        ret_exp = {'out': False, 'hostname': '1.1.1.1',
-                   'tablename': 'ModuleTable',
-                   'message': 'Given table file {} cannot be located'.format(file)}
-        with patch('jnpr.junos.factory.FactoryLoader.load') as mock_load, \
-                patch('glob.glob') as mock_fopen:
-            mock_fopen.return_value = []
-            ret = junos.get_table(table, file)
-            self.assertEqual(ret, ret_exp)
-            mock_load.assert_not_called()
-
-    def test_get_table_yaml_load_error(self):
-        table = 'ModuleTable'
-        file = 'inventory.yml'
-        path = '/path/to/file'
-        message = 'File not located test'
-        ret_exp = {'out': False, 'hostname': '1.1.1.1',
-                   'tablename': 'ModuleTable',
-                   'message': 'Uncaught exception during YAML Load - please report: {}'
-                   .format(message)}
-        with patch('salt.utils.files.fopen', mock_open(IOError(message))) as mock_file, \
-                patch('glob.glob') as mock_fopen:
-            mock_fopen.return_value = ['/path/to/file']
-            ret = junos.get_table(table, file, path)
-            self.assertEqual(ret, ret_exp)
-
-    def test_get_table_api_error(self):
-        table = str('sample')
-        file = 'inventory.yml'
-        ret_exp = {'out': False, 'hostname': '1.1.1.1',
-                   'tablename': 'sample',
-                   'message': 'Uncaught exception during get API call - please report:'
-                              ' \'{}\''.format(six.text_type(table))}
-        with patch('jnpr.junos.device.Device.execute') as mock_execute:
-            ret = junos.get_table(table, file)
-            self.assertEqual(ret['out'], ret_exp['out'])
-            self.assertEqual(ret['tablename'], ret_exp['tablename'])
-            self.assertEqual(ret['message'], ret_exp['message'])
-
-    def test_get_table_connect_closed_error(self):
-        table = 'ModuleTable'
-        file = 'inventory.yml'
-        ret_exp = {'out': False, 'hostname': '1.1.1.1',
-                   'tablename': 'ModuleTable',
-                   'message': 'Got ConnectClosedError exception. Connection lost with Device(1.1.1.1)'}
-        with patch('jnpr.junos.factory.optable.OpTable.get') as mock_load:
-            dev = Device(host='1.1.1.1', user='rick')
-            mock_load.side_effect = ConnectClosedError(dev)
-            ret = junos.get_table(table, file)
-            self.assertEqual(ret['out'], ret_exp['out'])
-            self.assertEqual(ret['tablename'], ret_exp['tablename'])
-            self.assertEqual(ret['message'], ret_exp['message'])
-
-    def test_get_table_inventory(self):
-        table = 'ModuleTable'
-        file = 'inventory.yml'
-        pyez_tables_path = os.path.dirname(os.path.abspath(tables_dir.__file__))
-        path = pyez_tables_path
-        with patch('jnpr.junos.device.Device.execute') as mock_execute, \
-                patch('salt.utils.json.dumps') as mock_dumps:
-            mock_dumps.return_value = 'json rpc reply'
-            m = mock_open()
-            ret = junos.get_table(table, file, path)
-            self.assertEqual(ret['out'], True)
-
-    def test_get_table_no_path_inventory(self):
-        table = 'ModuleTable'
-        file = 'inventory.yml'
-        with patch('jnpr.junos.device.Device.execute') as mock_execute, \
-            patch('salt.utils.json.dumps') as mock_dumps:
-            mock_dumps.return_value = 'json rpc reply'
-            m = mock_open()
-            ret = junos.get_table(table, file)
-            self.assertEqual(ret['out'], True)

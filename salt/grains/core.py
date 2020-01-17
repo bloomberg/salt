@@ -20,10 +20,10 @@ import platform
 import logging
 import locale
 import uuid
-import zlib
 from errno import EACCES, EPERM
 import datetime
 import warnings
+import time
 
 # pylint: disable=import-error
 try:
@@ -55,7 +55,6 @@ except ImportError:
 # Import salt libs
 import salt.exceptions
 import salt.log
-import salt.utils.args
 import salt.utils.dns
 import salt.utils.files
 import salt.utils.network
@@ -63,7 +62,6 @@ import salt.utils.path
 import salt.utils.pkg.rpm
 import salt.utils.platform
 import salt.utils.stringutils
-import salt.utils.versions
 from salt.ext import six
 from salt.ext.six.moves import range
 
@@ -106,6 +104,10 @@ if not hasattr(os, 'uname'):
 
 _INTERFACES = {}
 
+# Possible value for h_errno defined in netdb.h
+HOST_NOT_FOUND = 1
+NO_DATA = 4
+
 
 def _windows_cpudata():
     '''
@@ -142,7 +144,6 @@ def _linux_cpudata():
     # Parse over the cpuinfo file
     if os.path.isfile(cpuinfo):
         with salt.utils.files.fopen(cpuinfo, 'r') as _fp:
-            grains['num_cpus'] = 0
             for line in _fp:
                 comps = line.split(':')
                 if not len(comps) > 1:
@@ -150,7 +151,14 @@ def _linux_cpudata():
                 key = comps[0].strip()
                 val = comps[1].strip()
                 if key == 'processor':
-                    grains['num_cpus'] += 1
+                    grains['num_cpus'] = int(val) + 1
+                # head -2 /proc/cpuinfo
+                # vendor_id       : IBM/S390
+                # # processors    : 2
+                elif key == '# processors':
+                    grains['num_cpus'] = int(val)
+                elif key == 'vendor_id':
+                    grains['cpu_model'] = val
                 elif key == 'model name':
                     grains['cpu_model'] = val
                 elif key == 'flags':
@@ -243,7 +251,7 @@ def _linux_gpu_data():
 
     gpus = []
     for gpu in devs:
-        vendor_strings = re.split('[^A-Za-z0-9]', gpu['Vendor'].lower())
+        vendor_strings = gpu['Vendor'].lower().split()
         # default vendor to 'unknown', overwrite if we match a known one
         vendor = 'unknown'
         for name in known_vendors:
@@ -628,7 +636,7 @@ def _windows_virtual(osdata):
     if osdata['kernel'] != 'Windows':
         return grains
 
-    grains['virtual'] = 'physical'
+    grains['virtual'] = osdata.get('virtual', 'physical')
 
     # It is possible that the 'manufacturer' and/or 'productname' grains
     # exist but have a value of None.
@@ -683,7 +691,8 @@ def _virtual(osdata):
     # Provides:
     #   virtual
     #   virtual_subtype
-    grains = {'virtual': 'physical'}
+
+    grains = {'virtual': osdata.get('virtual', 'physical')}
 
     # Skip the below loop on platforms which have none of the desired cmds
     # This is a temporary measure until we can write proper virtual hardware
@@ -1007,17 +1016,17 @@ def _virtual(osdata):
             if maker.startswith('Bochs'):
                 grains['virtual'] = 'kvm'
         if sysctl:
-            hv_vendor = __salt__['cmd.run']('{0} hw.hv_vendor'.format(sysctl))
-            model = __salt__['cmd.run']('{0} hw.model'.format(sysctl))
+            hv_vendor = __salt__['cmd.run']('{0} -n hw.hv_vendor'.format(sysctl))
+            model = __salt__['cmd.run']('{0} -n hw.model'.format(sysctl))
             jail = __salt__['cmd.run'](
                 '{0} -n security.jail.jailed'.format(sysctl)
             )
             if 'bhyve' in hv_vendor:
                 grains['virtual'] = 'bhyve'
+            elif 'QEMU Virtual CPU' in model:
+                grains['virtual'] = 'kvm'
             if jail == '1':
                 grains['virtual_subtype'] = 'jail'
-            if 'QEMU Virtual CPU' in model:
-                grains['virtual'] = 'kvm'
     elif osdata['kernel'] == 'OpenBSD':
         if 'manufacturer' in osdata:
             if osdata['manufacturer'] in ['QEMU', 'Red Hat', 'Joyent']:
@@ -1881,16 +1890,8 @@ def os_data():
                                     comps[3].replace('(', '').replace(')', '')
                 elif os.path.isfile('/etc/centos-release'):
                     log.trace('Parsing distrib info from /etc/centos-release')
-                    # Maybe CentOS Linux; could also be SUSE Expanded Support.
-                    # SUSE ES has both, centos-release and redhat-release.
-                    if os.path.isfile('/etc/redhat-release'):
-                        with salt.utils.files.fopen('/etc/redhat-release') as ifile:
-                            for line in ifile:
-                                if "red hat enterprise linux server" in line.lower():
-                                    # This is a SUSE Expanded Support Rhel installation
-                                    grains['lsb_distrib_id'] = 'RedHat'
-                                    break
-                    grains.setdefault('lsb_distrib_id', 'CentOS')
+                    # CentOS Linux
+                    grains['lsb_distrib_id'] = 'CentOS'
                     with salt.utils.files.fopen('/etc/centos-release') as ifile:
                         for line in ifile:
                             # Need to pull out the version and codename
@@ -1934,7 +1935,7 @@ def os_data():
         # (though apparently it's not intelligent enough to strip quotes)
         log.trace(
             'Getting OS name, release, and codename from '
-            'distro.linux_distribution()'
+            'platform.linux_distribution()'
         )
         (osname, osrelease, oscodename) = \
             [x.strip('"').strip("'") for x in
@@ -2057,6 +2058,7 @@ def os_data():
     else:
         grains['os'] = grains['kernel']
     if grains['kernel'] == 'FreeBSD':
+        grains['osfullname'] = grains['os']
         try:
             grains['osrelease'] = __salt__['cmd.run']('freebsd-version -u').split('-')[0]
         except salt.exceptions.CommandExecutionError:
@@ -2148,14 +2150,23 @@ def locale_info():
             grains['locale_info']['defaultlanguage'],
             grains['locale_info']['defaultencoding']
         ) = locale.getdefaultlocale()
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
         # locale.getdefaultlocale can ValueError!! Catch anything else it
         # might do, per #2205
         grains['locale_info']['defaultlanguage'] = 'unknown'
         grains['locale_info']['defaultencoding'] = 'unknown'
     grains['locale_info']['detectedencoding'] = __salt_system_encoding__
+
+    grains['locale_info']['timezone'] = 'unknown'
     if _DATEUTIL_TZ:
-        grains['locale_info']['timezone'] = datetime.datetime.now(dateutil.tz.tzlocal()).tzname()
+        try:
+            grains['locale_info']['timezone'] = datetime.datetime.now(dateutil.tz.tzlocal()).tzname()
+        except UnicodeDecodeError:
+            # Because the method 'tzname' is not a part of salt the decoding error cant be fixed.
+            # The error is in datetime in the python2 lib
+            if salt.utils.platform.is_windows():
+                grains['locale_info']['timezone'] = time.tzname[0].decode('mbcs')
+
     return grains
 
 
@@ -2225,23 +2236,25 @@ def fqdns():
     grains = {}
     fqdns = set()
 
-    addresses = salt.utils.network.ip_addrs(include_loopback=False, interface_data=_get_interfaces())
-    addresses.extend(salt.utils.network.ip_addrs6(include_loopback=False, interface_data=_get_interfaces()))
-    err_message = 'Exception during resolving address: %s'
+    addresses = salt.utils.network.ip_addrs(include_loopback=False,
+                                            interface_data=_INTERFACES)
+    addresses.extend(salt.utils.network.ip_addrs6(include_loopback=False,
+                                                  interface_data=_INTERFACES))
+    err_message = 'An exception occurred resolving address \'%s\': %s'
     for ip in addresses:
         try:
-            name, aliaslist, addresslist = socket.gethostbyaddr(ip)
-            fqdns.update([socket.getfqdn(name)] + [als for als in aliaslist if salt.utils.network.is_fqdn(als)])
+            fqdns.add(socket.getfqdn(socket.gethostbyaddr(ip)[0]))
         except socket.herror as err:
-            if err.errno == 0:
+            if err.errno in (0, HOST_NOT_FOUND, NO_DATA):
                 # No FQDN for this IP address, so we don't need to know this all the time.
                 log.debug("Unable to resolve address %s: %s", ip, err)
             else:
-                log.error(err_message, err)
+                log.error(err_message, ip, err)
         except (socket.error, socket.gaierror, socket.timeout) as err:
-            log.error(err_message, err)
+            log.error(err_message, ip, err)
 
-    return {"fqdns": sorted(list(fqdns))}
+    grains['fqdns'] = sorted(list(fqdns))
+    return grains
 
 
 def ip_fqdn():
@@ -2767,52 +2780,7 @@ def _hw_data(osdata):
         else:
             log.error('The \'prtconf\' binary was not found in $PATH.')
 
-    elif osdata['kernel'] == 'AIX':
-        cmd = salt.utils.path.which('prtconf')
-        if data:
-            data = __salt__['cmd.run']('{0}'.format(cmd)) + os.linesep
-            for dest, regstring in (('serialnumber', r'(?im)^\s*Machine\s+Serial\s+Number:\s+(\S+)'),
-                                    ('systemfirmware', r'(?im)^\s*Firmware\s+Version:\s+(.*)')):
-                for regex in [re.compile(r) for r in [regstring]]:
-                    res = regex.search(data)
-                    if res and len(res.groups()) >= 1:
-                        grains[dest] = res.group(1).strip().replace("'", '')
-
-            product_regexes = [re.compile(r'(?im)^\s*System\s+Model:\s+(\S+)')]
-            for regex in product_regexes:
-                res = regex.search(data)
-                if res and len(res.groups()) >= 1:
-                    grains['manufacturer'], grains['productname'] = res.group(1).strip().replace("'", "").split(",")
-                    break
-        else:
-            log.error('The \'prtconf\' binary was not found in $PATH.')
-
     return grains
-
-
-def _get_hash_by_shell():
-    '''
-    Shell-out Python 3 for compute reliable hash
-    :return:
-    '''
-    id_ = __opts__.get('id', '')
-    id_hash = None
-    py_ver = sys.version_info[:2]
-    if py_ver >= (3, 3):
-        # Python 3.3 enabled hash randomization, so we need to shell out to get
-        # a reliable hash.
-        id_hash = __salt__['cmd.run']([sys.executable, '-c', 'print(hash("{0}"))'.format(id_)],
-                                      env={'PYTHONHASHSEED': '0'})
-        try:
-            id_hash = int(id_hash)
-        except (TypeError, ValueError):
-            log.debug('Failed to hash the ID to get the server_id grain. Result of hash command: %s', id_hash)
-            id_hash = None
-    if id_hash is None:
-        # Python < 3.3 or error encountered above
-        id_hash = hash(id_)
-
-    return abs(id_hash % (2 ** 31))
 
 
 def get_server_id():
@@ -2825,20 +2793,30 @@ def get_server_id():
     #   server_id
 
     if salt.utils.platform.is_proxy():
-        server_id = {}
-    else:
-        use_crc = __opts__.get('server_id_use_crc')
-        if bool(use_crc):
-            id_hash = getattr(zlib, use_crc, zlib.adler32)(__opts__.get('id', '').encode()) & 0xffffffff
-        else:
-            log.debug('This server_id is computed not by Adler32 nor by CRC32. '
-                      'Please use "server_id_use_crc" option and define algorithm you '
-                      'prefer (default "Adler32"). Starting with Sodium, the '
-                      'server_id will be computed with Adler32 by default.')
-            id_hash = _get_hash_by_shell()
-        server_id = {'server_id': id_hash}
+        return {}
+    id_ = __opts__.get('id', '')
+    id_hash = None
+    py_ver = sys.version_info[:2]
+    if py_ver >= (3, 3):
+        # Python 3.3 enabled hash randomization, so we need to shell out to get
+        # a reliable hash.
+        id_hash = __salt__['cmd.run'](
+            [sys.executable, '-c', 'print(hash("{0}"))'.format(id_)],
+            env={'PYTHONHASHSEED': '0'}
+        )
+        try:
+            id_hash = int(id_hash)
+        except (TypeError, ValueError):
+            log.debug(
+                'Failed to hash the ID to get the server_id grain. Result of '
+                'hash command: %s', id_hash
+            )
+            id_hash = None
+    if id_hash is None:
+        # Python < 3.3 or error encountered above
+        id_hash = hash(id_)
 
-    return server_id
+    return {'server_id': abs(id_hash % (2 ** 31))}
 
 
 def get_master():
@@ -2892,31 +2870,6 @@ def default_gateway():
                         if via == 'via':
                             grains['ip{0}_gw'.format(ip_version)] = gw_ip
                     break
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             continue
     return grains
-
-
-def kernelparams():
-    '''
-    Return the kernel boot parameters
-    '''
-    if salt.utils.platform.is_windows():
-        # TODO: add grains using `bcdedit /enum {current}`
-        return {}
-    else:
-        try:
-            with salt.utils.files.fopen('/proc/cmdline', 'r') as fhr:
-                cmdline = fhr.read()
-                grains = {'kernelparams': []}
-                for data in [item.split('=') for item in salt.utils.args.shlex_split(cmdline)]:
-                    value = None
-                    if len(data) == 2:
-                        value = data[1].strip('"')
-
-                    grains['kernelparams'] += [(data[0], value)]
-        except IOError as exc:
-            grains = {}
-            log.debug('Failed to read /proc/cmdline: %s', exc)
-
-        return grains

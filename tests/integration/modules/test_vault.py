@@ -10,9 +10,9 @@ import time
 
 # Import Salt Testing Libs
 from tests.support.unit import skipIf
-from tests.support.case import ModuleCase, ShellCase
+from tests.support.case import ModuleCase
 from tests.support.helpers import destructiveTest, flaky
-from tests.support.runtests import RUNTIME_VARS
+from tests.support.paths import FILES
 
 # Import Salt Libs
 import salt.utils.path
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 @destructiveTest
 @skipIf(not salt.utils.path.which('dockerd'), 'Docker not installed')
 @skipIf(not salt.utils.path.which('vault'), 'Vault not installed')
-class VaultTestCase(ModuleCase, ShellCase):
+class VaultTestCase(ModuleCase):
     '''
     Test vault module
     '''
@@ -34,7 +34,7 @@ class VaultTestCase(ModuleCase, ShellCase):
         '''
         SetUp vault container
         '''
-        if VaultTestCase.count == 0:
+        if self.count == 0:
             config = '{"backend": {"file": {"path": "/vault/file"}}, "default_lease_ttl": "168h", "max_lease_ttl": "720h"}'
             self.run_state('docker_image.present', name='vault', tag='0.9.6')
             self.run_state(
@@ -54,50 +54,25 @@ class VaultTestCase(ModuleCase, ShellCase):
                 cmd='/usr/local/bin/vault login token=testsecret',
                 env={'VAULT_ADDR': 'http://127.0.0.1:8200'},
             )
-            login_attempts = 1
-            # If the login failed, container might have stopped
-            # attempt again, maximum of three times before
-            # skipping.
-            while ret != 0:
-                self.run_state(
-                    'docker_container.running',
-                    name='vault',
-                    image='vault:0.9.6',
-                    port_bindings='8200:8200',
-                    environment={
-                        'VAULT_DEV_ROOT_TOKEN_ID': 'testsecret',
-                        'VAULT_LOCAL_CONFIG': config,
-                    },
-                    cap_add='IPC_LOCK',
-                )
-                time.sleep(5)
-                ret = self.run_function(
-                    'cmd.retcode',
-                    cmd='/usr/local/bin/vault login token=testsecret',
-                    env={'VAULT_ADDR': 'http://127.0.0.1:8200'},
-                )
-                login_attempts += 1
-                if login_attempts >= 3:
-                    self.skipTest('unable to login to vault')
+            if ret != 0:
+                self.skipTest('unable to login to vault')
             ret = self.run_function(
                 'cmd.retcode',
-                cmd='/usr/local/bin/vault policy write testpolicy {0}/vault.hcl'.format(RUNTIME_VARS.FILES),
+                cmd='/usr/local/bin/vault policy write testpolicy {0}/vault.hcl'.format(FILES),
                 env={'VAULT_ADDR': 'http://127.0.0.1:8200'},
             )
             if ret != 0:
                 self.skipTest('unable to assign policy to vault')
-        VaultTestCase.count += 1
+        self.count += 1
 
     def tearDown(self):
         '''
         TearDown vault container
         '''
         def count_tests(funcobj):
-            return (inspect.ismethod(funcobj) or
-                    inspect.isfunction(funcobj)) and \
-                 funcobj.__name__.startswith('test_')
+            return inspect.ismethod(funcobj) and funcobj.__name__.startswith('test_')
         numtests = len(inspect.getmembers(VaultTestCase, predicate=count_tests))
-        if VaultTestCase.count >= numtests:
+        if self.count >= numtests:
             self.run_state('docker_container.stopped', name='vault')
             self.run_state('docker_container.absent', name='vault')
             self.run_state('docker_image.absent', name='vault', force=True)
