@@ -12,19 +12,19 @@ Configuration of network device
 .. code-block:: yaml
 
     eth0:
-      ethtool.coalesce:
+      ethtool_mod.coalesce:
         - name: eth0
         - rx_usecs: 24
         - tx_usecs: 48
 
     eth0:
-      ethtool.ring:
+      ethtool_mod.ring:
         - name: eth0
         - rx: 1024
         - tx: 1024
 
     eth0:
-      ethtool.offload:
+      ethtool_mod.offload:
         - name: eth0
         - tcp_segmentation_offload: on
 
@@ -45,7 +45,7 @@ def __virtual__():
     '''
     Provide ethtool state
     '''
-    return 'ethtool' if 'ethtool.show_driver' in __salt__ else False
+    return 'ethtool_mod' if 'ethtool_mod.show_driver' in __salt__ else False
 
 
 def coalesce(name, **kwargs):
@@ -58,7 +58,7 @@ def coalesce(name, **kwargs):
     .. code-block:: yaml
 
         eth0:
-          ethtool.coalesce:
+          ethtool_mod.coalesce:
             - name: eth0
             - adaptive_rx: on
             - adaptive_tx: on
@@ -96,7 +96,7 @@ def coalesce(name, **kwargs):
 
     # Build coalescing settings
     try:
-        old = __salt__['ethtool.show_coalesce'](name)
+        old = __salt__['ethtool_mod.show_coalesce'](name)
         if not isinstance(old, dict):
             ret['result'] = False
             ret['comment'] = 'Device {0} coalescing settings are not supported'.format(name)
@@ -137,7 +137,7 @@ def coalesce(name, **kwargs):
     # Apply coalescing settings
     if apply_coalescing:
         try:
-            __salt__['ethtool.set_coalesce'](name, **new)
+            __salt__['ethtool_mod.set_coalesce'](name, **new)
         except AttributeError as error:
             ret['result'] = False
             ret['comment'] = six.text_type(error)
@@ -158,7 +158,7 @@ def ring(name, **kwargs):
     .. code-block:: yaml
 
         eth0:
-          ethtool.ring:
+          ethtool_mod.ring:
             - name: eth0
             - rx: 1024
             - rx_mini: 0
@@ -178,7 +178,7 @@ def ring(name, **kwargs):
 
     # Build ring parameters
     try:
-        old = __salt__['ethtool.show_ring'](name)
+        old = __salt__['ethtool_mod.show_ring'](name)
         if not isinstance(old, dict):
             ret['result'] = False
             ret['comment'] = 'Device {0} ring parameters are not supported'.format(name)
@@ -221,7 +221,7 @@ def ring(name, **kwargs):
     # Apply ring parameters
     if apply_ring:
         try:
-            __salt__['ethtool.set_ring'](name, **new)
+            __salt__['ethtool_mod.set_ring'](name, **new)
         except AttributeError as error:
             ret['result'] = False
             ret['comment'] = six.text_type(error)
@@ -240,7 +240,7 @@ def offload(name, **kwargs):
     .. code-block:: yaml
 
         eth0:
-          ethtool.offload:
+          ethtool_mod.offload:
             - name: eth0
             - tcp_segmentation_offload: on
 
@@ -257,7 +257,7 @@ def offload(name, **kwargs):
 
     # Build offload settings
     try:
-        old = __salt__['ethtool.show_offload'](name)
+        old = __salt__['ethtool_mod.show_offload'](name)
         if not isinstance(old, dict):
             ret['result'] = False
             ret['comment'] = 'Device {0} offload settings are not supported'.format(name)
@@ -297,7 +297,7 @@ def offload(name, **kwargs):
     # Apply offload settings
     if apply_offload:
         try:
-            __salt__['ethtool.set_offload'](name, **new)
+            __salt__['ethtool_mod.set_offload'](name, **new)
         except AttributeError as error:
             ret['result'] = False
             ret['comment'] = six.text_type(error)
