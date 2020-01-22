@@ -61,6 +61,9 @@ def _size_convert(_re_size):
 def mounted(name,
             device,
             fstype,
+            device_fsck='-',
+            pass_fsck='-',
+            mount_at_boot='yes',
             mkmnt=False,
             opts='defaults',
             dump=0,
@@ -585,6 +588,10 @@ def mounted(name,
             elif 'AIX' in __grains__['os']:
                 config = "/etc/filesystems"
 
+            # Override default for SunOS
+            elif 'SunOS' in __grains__['kernel']:
+                config = "/etc/vfstab"
+
         if __opts__['test']:
             if __grains__['os'] in ['MacOS', 'Darwin']:
                 out = __salt__['mount.set_automaster'](name,
@@ -656,6 +663,16 @@ def mounted(name,
                                                   fstype,
                                                   opts,
                                                   mount,
+                                                  config,
+                                                  match_on=match_on)
+            elif __grains__['kernel'] == 'SunOS':
+                out = __salt__['mount.set_vfstab'](name,
+                                                  device,
+                                                  fstype,
+                                                  opts,
+                                                  device_fsck,
+                                                  pass_fsck,
+                                                  mount_at_boot,
                                                   config,
                                                   match_on=match_on)
             else:
