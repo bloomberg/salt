@@ -323,7 +323,7 @@ class MountTestCase(TestCase, LoaderModuleMockMixin):
         name3 = os.path.realpath('/mnt/jfs2')
         device3 = '/dev/hd1'
         fstype3 = 'jfs2'
-        opts3 = ['']f
+        opts3 = ['']
         mock_mnta = MagicMock(return_value={name3: {'device': device3, 'opts': opts3}})
         mock_aixfs = MagicMock(return_value={name: {'dev': name3, 'fstype': fstype3}})
         mock_delete_cache = MagicMock(return_value=True)
