@@ -68,7 +68,7 @@ for k, v in ethtool_ring_map.items():
     ethtool_ring_remap[v] = k
 
 # Define the module's virtual name
-__virtualname__ = 'ethtool'
+__virtualname__ = 'ethtool_mod'
 
 
 def __virtual__():
@@ -90,7 +90,7 @@ def show_ring(devname):
 
     .. code-block:: bash
 
-        salt '*' ethtool.show_ring <devname>
+        salt '*' ethtool_mod.show_ring <devname>
     '''
 
     try:
@@ -114,7 +114,7 @@ def show_coalesce(devname):
 
     .. code-block:: bash
 
-        salt '*' ethtool.show_coalesce <devname>
+        salt '*' ethtool_mod.show_coalesce <devname>
     '''
 
     try:
@@ -138,7 +138,7 @@ def show_driver(devname):
 
     .. code-block:: bash
 
-        salt '*' ethtool.show_driver <devname>
+        salt '*' ethtool_mod.show_driver <devname>
     '''
 
     try:
@@ -169,7 +169,7 @@ def set_ring(devname, **kwargs):
 
     .. code-block:: bash
 
-        salt '*' ethtool.set_ring <devname> [rx=N] [rx_mini=N] [rx_jumbo=N] [tx=N]
+        salt '*' ethtool_mod.set_ring <devname> [rx=N] [rx_mini=N] [rx_jumbo=N] [tx=N]
     '''
 
     try:
@@ -204,7 +204,7 @@ def set_coalesce(devname, **kwargs):
 
     .. code-block:: bash
 
-        salt '*' ethtool.set_coalesce <devname> [adaptive_rx=on|off] [adaptive_tx=on|off] [rx_usecs=N] [rx_frames=N]
+        salt '*' ethtool_mod.set_coalesce <devname> [adaptive_rx=on|off] [adaptive_tx=on|off] [rx_usecs=N] [rx_frames=N]
             [rx_usecs_irq=N] [rx_frames_irq=N] [tx_usecs=N] [tx_frames=N] [tx_usecs_irq=N] [tx_frames_irq=N]
             [stats_block_usecs=N] [pkt_rate_low=N] [rx_usecs_low=N] [rx_frames_low=N] [tx_usecs_low=N] [tx_frames_low=N]
             [pkt_rate_high=N] [rx_usecs_high=N] [rx_frames_high=N] [tx_usecs_high=N] [tx_frames_high=N]
@@ -243,7 +243,7 @@ def show_offload(devname):
 
     .. code-block:: bash
 
-        salt '*' ethtool.show_offload <devname>
+        salt '*' ethtool_mod.show_offload <devname>
     '''
 
     try:
@@ -284,7 +284,7 @@ def set_offload(devname, **kwargs):
 
     .. code-block:: bash
 
-        salt '*' ethtool.set_offload <devname> tcp_segmentation_offload=on
+        salt '*' ethtool_mod.set_offload <devname> tcp_segmentation_offload=on
     '''
 
     for param, value in kwargs.items():
