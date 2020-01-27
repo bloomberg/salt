@@ -8,7 +8,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import os
 import shutil
 import tempfile
-
+import copy
 # Import Salt Testing libs
 import tests.integration as integration
 from tests.support.unit import TestCase, skipIf
@@ -301,6 +301,26 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
         high, _ = self.highstate.render_highstate(matches)
         ret = salt.state.find_sls_ids('issue-47182.stateA.newer', high)
         self.assertEqual(ret, [('somestuff', 'cmd')])
+
+
+@skipIf(NO_MOCK, NO_MOCK_REASON)
+@skipIf(pytest is None, 'PyTest is missing')
+class BaseHighStateTestCase(TestCase):
+    '''
+    TestCase for code handling BaseHighState.
+    '''
+    def test_load_dynamic():
+        import pdb; pdb.set_trace()
+        with patch('salt.state.State._gather_pillar'):
+            minion_opts = copy.deepcopy(self.get_temp_config('minion'))
+
+            minion_opts['autoload_dynamic_modules'] = False
+            import pdb; pdb.set_trace()
+            self.base_highstate_obj = salt.state.BaseHighState(minion_opts)
+
+            ret = self.base_highstate_obj.load_dynamic(['cats'])
+
+            assert ret is None
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)
