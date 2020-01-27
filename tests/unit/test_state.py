@@ -309,7 +309,7 @@ class BaseHighStateTestCase(TestCase):
     '''
     TestCase for code handling BaseHighState.
     '''
-    def test_load_dynamic():
+    def test_load_dynamic(self):
         import pdb; pdb.set_trace()
         with patch('salt.state.State._gather_pillar'):
             minion_opts = copy.deepcopy(self.get_temp_config('minion'))
