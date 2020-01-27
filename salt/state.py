@@ -3617,11 +3617,25 @@ class BaseHighState(object):
 
     def load_dynamic(self, matches):
         '''
-        If autoload_dynamic_modules is True then automatically load the
+        If autoload_dynamic_modules is True/"matches" then automatically load the
         dynamic modules
+        If autoload_dynamic_modules is "all" then automatically load the dynamic modules
+        for all known environments as per the ext pillar environments.py
         '''
-        if not self.opts['autoload_dynamic_modules']:
+        autoload_dynamic_modules = self.opts['autoload_dynamic_modules']
+
+        if not autoload_dynamic_modules:
             return
+
+        if autoload_dynamic_modules not in (True, 'matches', 'all'):
+            raise ValueError('"{}" is an invalid value for "autoload_dynamic_modules"'.format(autoload_dynamic_modules))
+
+        if autoload_dynamic_modules == "all":
+            if 'environments' in self.state.opts['pillar']:
+                matches = self.state.opts['pillar']['environments']
+            else:
+                log.error('"Environments" was not found in pillar. Reverting "autoload_dynamic_modules" back to matches')
+
         syncd = self.state.functions['saltutil.sync_all'](list(matches),
                                                           refresh=False)
         if syncd['grains']:

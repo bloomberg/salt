@@ -253,7 +253,9 @@ VALID_OPTS = {
     'failhard': bool,
 
     # A flag to indicate that highstate runs should force refresh the modules prior to execution
-    'autoload_dynamic_modules': bool,
+    # Setting to "matches" is the same behavior as True (It will only sync environments that match with top.sls)
+    # Setting to "all" includes all known environments as found in the ext pillar environments
+    'autoload_dynamic_modules': tuple(bool, six.string_types)
 
     # Force the minion into a single environment when it fetches files from the master
     'saltenv': (type(None), six.string_types),
