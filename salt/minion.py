@@ -1103,7 +1103,6 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
     def __init__(self, opts, log_queue=None):
         super(Maintenance, self).__init__(log_queue=log_queue)
         self.opts = opts
-        self.maintenance_interval = 60
 
     # __setstate__ and __getstate__ are only used on Windows.
     # We do this so that __init__ will be invoked on Windows in the child
@@ -1138,12 +1137,14 @@ class Maintenance(salt.utils.process.SignalHandlingMultiprocessingProcess):
             if grains_refresh_every > 0 and grains_refresh_every <= (now - last_grains_refresh):
                 self.handle_grains_cache()
                 last_grains_refresh = int(time.time())
-            time.sleep(self.maintenance_interval)
+            time.sleep(self.opts['loop_interval'])
 
     def handle_grains_cache(self):
         if self.opts.get('grains_cache', False):
             import salt.loader
             salt.loader.grains(self.opts, force_refresh=True)
+            event = salt.utils.event.get_event('minion', opts=self.opts, listen=False)
+            event.fire_event({}, tag='grains_refresh')
 
 
 class Minion(MinionBase):
