@@ -3631,10 +3631,7 @@ class BaseHighState(object):
             raise ValueError('"{}" is an invalid value for "autoload_dynamic_modules"'.format(autoload_dynamic_modules))
 
         if autoload_dynamic_modules == "all":
-            if 'environments' in self.state.opts['pillar']:
-                matches = self.state.opts['pillar']['environments']
-            else:
-                log.error('"Environments" was not found in pillar. Reverting "autoload_dynamic_modules" back to matches')
+            matches = self._get_envs()
 
         syncd = self.state.functions['saltutil.sync_all'](list(matches),
                                                           refresh=False)
