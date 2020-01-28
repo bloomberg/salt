@@ -16,7 +16,8 @@ from tests.support.mock import (
     NO_MOCK,
     NO_MOCK_REASON,
     MagicMock,
-    patch)
+    patch,
+    call)
 from tests.support.mixins import AdaptedConfigurationTestCaseMixin
 from tests.support.runtests import RUNTIME_VARS
 
@@ -305,22 +306,51 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)
 @skipIf(pytest is None, 'PyTest is missing')
-class BaseHighStateTestCase(TestCase):
+class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
     '''
-    TestCase for code handling BaseHighState.
+    TestCase for code handling HighState.
     '''
-    def test_load_dynamic(self):
-        import pdb; pdb.set_trace()
-        with patch('salt.state.State._gather_pillar'):
-            minion_opts = copy.deepcopy(self.get_temp_config('minion'))
+    def test_load_dynamic_false(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = False
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args_list, [])
 
-            minion_opts['autoload_dynamic_modules'] = False
-            import pdb; pdb.set_trace()
-            self.base_highstate_obj = salt.state.BaseHighState(minion_opts)
+    def test_load_dynamic_true(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = True
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
 
-            ret = self.base_highstate_obj.load_dynamic(['cats'])
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args, call(['cats'], refresh=False))
 
-            assert ret is None
+    def test_load_dynamic_all(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = "all"
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
+
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args, call(['base', 'prod'], refresh=False))
+
+    def test_load_dynamic_bad_dynamic_modules_option(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = 'foo'
+        base_highstate_obj = salt.state.HighState(opts)
+
+        with pytest.raises(ValueError) as option_err:
+            ret = base_highstate_obj.load_dynamic(['cats'])
+
+        self.assertEqual((str(option_err.value)), '"foo" is an invalid value for "autoload_dynamic_modules"')
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)
