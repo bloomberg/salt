@@ -8,6 +8,7 @@ import tempfile
 import textwrap
 import threading
 import time
+import sys
 
 # Import Salt Testing libs
 from tests.support.runtests import RUNTIME_VARS
@@ -807,6 +808,15 @@ class StateModuleTest(ModuleCase, SaltReturnAssertsMixin):
         self.assertReturnNonEmptySaltType(ret)
         self.assertIn('One or more requisite failed',
                       result['cmd_|-D_|-echo D_|-run']['comment'])
+
+    def test_requisites_require_any_fail_no_valid_ids(self):
+        '''
+        Call sls file containing several require_in and require.
+
+        Ensure that if none are real, a rendering exception is raised
+        '''
+        ret = self.run_function('state.sls', mods='requisites.require_any_fail_no_valid_ids')
+        self.assertIn('Could not find at least one valid id for requisite', ret)
 
     def test_requisites_watch_any(self):
         '''

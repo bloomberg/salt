@@ -346,11 +346,11 @@ class SaltLoggingClass(six.with_metaclass(LoggingMixInMeta, LOGGING_LOGGER_CLASS
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info,
                    func=None, extra=None, sinfo=None):
         # Let's remove exc_info_on_loglevel from extra
-        exc_info_on_loglevel = extra.pop('exc_info_on_loglevel')
+        exc_info_on_loglevel = extra.pop('exc_info_on_loglevel', None)
 
         jid = extra.pop('jid', '')
         if jid:
-            log_fmt_jid = extra.pop('log_fmt_jid')
+            log_fmt_jid = extra.pop('log_fmt_jid', '')
             jid = log_fmt_jid % {'jid': jid}
 
         if not extra:

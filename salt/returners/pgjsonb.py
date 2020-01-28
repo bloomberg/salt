@@ -4,7 +4,7 @@ Return data to a PostgreSQL server with json data stored in Pg's jsonb data type
 
 :maintainer:    Dave Boucha <dave@saltstack.com>, Seth House <shouse@saltstack.com>, C. R. Oldham <cr@saltstack.com>
 :maturity:      Stable
-:depends:       python-psycopg2
+:depends:       python-psycopg2, sqlalchemy
 :platform:      all
 
 .. note::
@@ -88,11 +88,13 @@ Use the following Pg database schema:
     DROP TABLE IF EXISTS jids;
     CREATE TABLE jids (
        jid varchar(255) NOT NULL primary key,
+       minions text[] default ARRAY[]::text[],
        load jsonb NOT NULL
     );
     CREATE INDEX idx_jids_jsonb on jids
            USING gin (load)
            WITH (fastupdate=on);
+    CREATE INDEX idx_minions ON jids USING GIN(minions);
 
     --
     -- Table structure for table `salt_returns`
@@ -167,6 +169,8 @@ import re
 import sys
 import time
 import logging
+import dateutil
+from datetime import datetime, timedelta
 
 # Import salt libs
 import salt.returners
@@ -178,9 +182,18 @@ from salt.ext import six
 try:
     import psycopg2
     import psycopg2.extras
+    from psycopg2.extras import Json
     import psycopg2.extensions
+    from psycopg2 import sql
+    from psycopg2.sql import SQL, Identifier, Literal
     logging.getLogger('persistqueue.common').setLevel(logging.ERROR)
     import persistqueue
+
+    import sqlalchemy
+    from sqlalchemy import create_engine, BigInteger, Column, DateTime, Index, String, Table, Text, text, select, or_, and_
+    from sqlalchemy.dialects.postgresql import INET, JSONB, array, ARRAY
+    from sqlalchemy.ext.declarative import declarative_base
+
     HAS_PG = True
 except ImportError:
     HAS_PG = False
@@ -189,8 +202,6 @@ log = logging.getLogger(__name__)
 
 # Define the module's virtual name
 __virtualname__ = 'pgjsonb'
-
-PG_SAVE_LOAD_SQL = '''INSERT INTO jids (jid, load) VALUES (%(jid)s, %(load)s)'''
 
 
 # need a stub connection in cases where we can't connect at all to the database
@@ -201,7 +212,7 @@ class PersistentFailureConn():
         pass
 
 
-class PersistentFailureCursor(psycopg2.extensions.cursor):
+class PersistentFailureCursor(psycopg2.extras.LoggingCursor):
     queue_options = None
 
     def __init__(self, *args, **kwargs):
@@ -220,7 +231,7 @@ class PersistentFailureCursor(psycopg2.extensions.cursor):
 
     def execute(self, sql, args=None):
         try:
-            psycopg2.extensions.cursor.execute(self, sql, args)
+            super(PersistentFailureCursor, self).execute(sql, args)
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
             if re.match('^INSERT|UPDATE', sql, re.I):
                 log.info("PersistentFailureCursor: caught psycopg2.OperationalError/psycopg2.InterfaceError on INSERT, saving for later re-attempt")
@@ -250,7 +261,7 @@ class PersistentFailureCursor(psycopg2.extensions.cursor):
 
 def __virtual__():
     if not HAS_PG:
-        return False, 'Could not import pgjsonb returner; python-psycopg2 is not installed.'
+        return False, 'Could not import pgjsonb returner; python-psycopg2 or sqlalchemy is not installed.'
     return True
 
 
@@ -281,6 +292,7 @@ def _get_options(ret=None):
         'sslcrl': 'sslcrl',
         'persistqueue': 'persistqueue',
         'on_conflict': 'on_conflict',
+        'echo': 'echo',
     }
 
     _options = salt.returners.get_returner_options('returner.{0}'.format(__virtualname__),
@@ -293,6 +305,27 @@ def _get_options(ret=None):
     if 'port' in _options:
         _options['port'] = int(_options['port'])
     return _options
+
+
+def _get_engine():
+    options = _get_options()
+
+    opts = {
+        'drivername': 'postgresql',
+        'host': options['host'],
+        'username': options['user'],
+        'password': options['pass'],
+        'database': options['db'],
+        'port': options['port'],
+    }
+
+    for kw in ['sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'sslcrl']:
+        if kw in options:
+            opts.setdefault('query', {})[kw] = options[kw]
+
+    url = sqlalchemy.engine.url.URL(**opts)
+
+    return create_engine(url, echo=options.get('echo', False))
 
 
 @contextmanager
@@ -316,8 +349,10 @@ def _get_serv(ret=None, commit=False):
             dbname=_options.get('db'),
             user=_options.get('user'),
             password=_options.get('pass'),
+            connection_factory=psycopg2.extras.LoggingConnection,
             **ssl_options
         )
+        conn.initialize(log)
 
         if _options.get('persistqueue'):
             cursor = conn.cursor(cursor_factory=PersistentFailureCursor)
@@ -327,13 +362,6 @@ def _get_serv(ret=None, commit=False):
         cursor = PersistentFailureCursor(ret=ret, stub=True)
         conn = PersistentFailureConn()
 
-    # if the database is down we need to hint that on conflict is to be used
-    if (conn.server_version is not None and conn.server_version >= 90500) or _options.get('on_conflict'):
-        global PG_SAVE_LOAD_SQL
-        PG_SAVE_LOAD_SQL = '''INSERT INTO jids
-                              (jid, load)
-                              VALUES (%(jid)s, %(load)s)
-                              ON CONFLICT (jid) DO NOTHING'''
     try:
         yield cursor
     except psycopg2.DatabaseError as err:
@@ -390,10 +418,24 @@ def save_load(jid, load, minions=None):
     '''
     Save the load to the specified jid id
     '''
+    if not minions:
+        minions = []
+
     with _get_serv(commit=True) as cur:
+
+        # if the database is down we need to hint that on conflict is to be used
+        if (cur.connection.server_version is not None and cur.connection.server_version >= 90500) or _options.get('on_conflict'):
+            sql = '''INSERT INTO jids
+                                  (jid, load, minions)
+                                  VALUES (%(jid)s, %(load)s, %(minions)s)
+                                  ON CONFLICT (jid) DO NOTHING'''
+        else:
+            sql = '''INSERT INTO jids (jid, load, minions) VALUES (%(jid)s, %(load)s, %(minions)s)'''
+
         try:
-            cur.execute(PG_SAVE_LOAD_SQL,
-                        {'jid': jid, 'load': psycopg2.extras.Json(load)})
+            values = {'jid': jid, 'load': psycopg2.extras.Json(load), 'minions': minions}
+
+            cur.execute(sql, values)
         except psycopg2.IntegrityError:
             # https://github.com/saltstack/salt/issues/22171
             # Without this try/except we get tons of duplicate entry errors
@@ -626,3 +668,137 @@ def clean_old_jobs():
                 _purge_jobs(stamp)
         except Exception as e:
             log.error(e)
+
+
+
+Base = declarative_base()
+metadata = Base.metadata
+
+
+t_cache = Table(
+    'cache', metadata,
+    Column('bank', String(255), nullable=False, index=True),
+    Column('key', String(255), nullable=False, index=True),
+    Column('data', JSONB(astext_type=Text()), nullable=False, index=True),
+    Column('created_at', DateTime(True), nullable=False, server_default=text("now()")),
+    Column('expires_at', DateTime(True)),
+    Index('idx_cache_i', 'bank', 'key', unique=True)
+)
+
+t_cache_grains_ipv4_view = Table(
+    'cache_grains_ipv4_view', metadata,
+    Column('key', String(255), unique=True),
+    Column('ipv4', ARRAY(INET()))
+)
+
+t_jids = Table(
+    'jids', metadata,
+    Column('jid', String(255), primary_key=True),
+    Column('alter_time', DateTime(True), nullable=False, index=True, server_default=text("now()")),
+    Column('load', JSONB(astext_type=Text()), nullable=False, index=True),
+    Column('minions', ARRAY(Text()), index=True, server_default=text("ARRAY[]::text[]"))
+)
+
+t_salt_events = Table(
+    'salt_events', metadata,
+    Column('id', BigInteger, nullable=False, unique=True, server_default=text("nextval('seq_salt_events_id'::regclass)")),
+    Column('tag', String(255), nullable=False, index=True),
+    Column('data', JSONB(astext_type=Text()), nullable=False, index=True),
+    Column('alter_time', DateTime(True), nullable=False, index=True, server_default=text("now()")),
+    Column('master_id', String(255), nullable=False)
+)
+
+t_salt_returns = Table(
+    'salt_returns', metadata,
+    Column('fun', String(50), nullable=False, index=True),
+    Column('jid', String(255), nullable=False, index=True),
+    Column('id', String(255), nullable=False, index=True),
+    Column('success', String(10), nullable=False),
+    Column('full_ret', JSONB(astext_type=Text()), nullable=False, index=True),
+    Column('alter_time', DateTime(True), nullable=False, index=True, server_default=text("NOW()"))
+)
+
+
+def list_jobs(target=None,
+              function=None,
+              metadata=None,
+              contains=None,
+              start_time=None,
+              end_time=None,
+              limit=100):
+    '''
+    optimized implementation of list_jobs for runner.jobs.list_jobs deferral
+    '''
+
+    if isinstance(target, six.text_type):
+        targets = [target]
+    elif isinstance(target, list):
+        targets = target
+    else:
+        targets = []
+
+    if isinstance(function, six.text_type):
+        functions = [function]
+    elif isinstance(function, list):
+        functions = function
+    else:
+        functions = []
+
+    if isinstance(contains, dict):
+        contains = [contains]
+    elif isinstance(contains, list) or contains is None:
+        pass
+    else:
+        raise salt.exceptions.CommandExecutionError('contains must be a list or dict')
+
+    if start_time is None:
+        start_time = datetime.now() - timedelta(days=7)
+    else:
+        start_time = dateutil.parser.parse(start_time)
+
+    if end_time:
+        end_time = dateutil.parser.parse(end_time)
+
+    # writing a CTE on jid with a contains on target would be faster than this query
+    # but not worth doubling the LOC
+    jids = select([t_jids.c.jid, t_jids.c.load, t_salt_returns.c.full_ret, t_salt_returns.c.success]) \
+        .select_from(t_jids.join(t_salt_returns, t_jids.c.jid == t_salt_returns.c.jid)) \
+        .where(
+            and_(
+                t_jids.c.alter_time >= start_time,
+                t_salt_returns.c.alter_time >= start_time
+            )
+        ) \
+        .limit(limit)
+
+    if targets:
+        jids = jids.where(
+           or_(
+                *[t_jids.c.load.contains({"arg":[{"pillar":{"tgt": tgt}}]}) for tgt in targets],
+                t_jids.c.minions.overlap(targets)
+            )
+        )
+
+    if functions:
+        jids = jids.where(
+            or_(t_jids.c.load.contains({"fun": func}) for func in functions)
+        )
+
+    if contains:
+        jids = jids.where(
+            or_(t_jids.c.load.contains(c) for c in contains)
+        )
+
+    if end_time:
+        jids = jids.where(t_salt_returns.c.alter_time <= end_time)
+
+    if metadata:
+        jids = jids.where(t_jids.c.load.contains(metadata))
+
+    ret = {}
+    with _get_engine().connect() as conn:
+        results = conn.execute(jids)
+        for result in results:
+            ret[result['jid']] = salt.utils.jid.format_jid_instance(result['jid'], result['load'], result['full_ret'])
+
+    return ret

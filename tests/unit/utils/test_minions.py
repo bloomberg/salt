@@ -3,6 +3,7 @@
 # Import python libs
 from __future__ import absolute_import, unicode_literals
 import sys
+import pdb
 
 # Import Salt Libs
 import salt.utils.minions
@@ -367,6 +368,26 @@ class CkMinionsTestCase(TestCase):
         args = ['1', '2']
         (ret, _) = self.ckminions.auth_check(auth_list, 'test.arg', args, 'runner')
         self.assertTrue(ret)
+
+
+    def test_factory_minion_role(self):
+        # Test factory when opt __role is minion
+        self.ckminions.opts['__role'] = 'minion'
+        ret = self.ckminions.factory(self.ckminions.opts)
+        self.assertEqual(type(ret), type(salt.utils.minions.RemoteCkMinions(self.ckminions.opts)))
+
+
+    def test_factory_cache_pgjsonb(self):
+        # Test factory when opt cache is pgjsonb
+        self.ckminions.opts['cache'] = 'pgjsonb'
+        ret = self.ckminions.factory(self.ckminions.opts)
+        self.assertEqual(type(ret), type(salt.utils.minions.PgJsonbCkMinions(self.ckminions.opts)))
+
+
+    def test_factory_default(self):
+        # Test factory when opt cache is pgjsonb
+        ret = self.ckminions.factory(self.ckminions.opts)
+        self.assertEqual(type(ret), type(salt.utils.minions.CkMinions(self.ckminions.opts)))
 
 
 @skipIf(sys.version_info < (2, 7), 'Python 2.7 needed for dictionary equality assertions')

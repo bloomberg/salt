@@ -16,7 +16,7 @@ from tests.support.unit import skipIf, TestCase
 from tests.support.mock import NO_MOCK, NO_MOCK_REASON, MagicMock, patch
 
 # Import salt libs
-import salt.modules.mdadm as mdadm
+import salt.modules.mdadm_raid as mdadm
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)

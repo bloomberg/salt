@@ -2497,7 +2497,14 @@ class State(object):
                                 'Could not locate requisite of [{0}] present in state with name [{1}]'.format(
                                     req_key, chunk['name']))
                     if not found:
-                        return 'unmet', ()
+                        if r_state.endswith('_any'):
+                            # we need to ensure at least one id is valid
+                            if not len(reqs[r_state]):
+                                raise SaltRenderError(
+                                    'Could not find at least one valid id for requisite of [{0}] present in state with name [{1}]'.format(
+                                        req_key, chunk['name']))
+                        else:
+                            return 'unmet', ()
         fun_stats = set()
         for r_state, chunks in six.iteritems(reqs):
             req_stats = set()
@@ -3610,11 +3617,22 @@ class BaseHighState(object):
 
     def load_dynamic(self, matches):
         '''
-        If autoload_dynamic_modules is True then automatically load the
+        If autoload_dynamic_modules is True/"matches" then automatically load the
         dynamic modules
+        If autoload_dynamic_modules is "all" then automatically load the dynamic modules
+        for all known environments as per the ext pillar environments.py
         '''
-        if not self.opts['autoload_dynamic_modules']:
+        autoload_dynamic_modules = self.opts['autoload_dynamic_modules']
+
+        if not autoload_dynamic_modules:
             return
+
+        if autoload_dynamic_modules not in (True, 'matches', 'all'):
+            raise ValueError('"{}" is an invalid value for "autoload_dynamic_modules"'.format(autoload_dynamic_modules))
+
+        if autoload_dynamic_modules == "all":
+            matches = self._get_envs()
+
         syncd = self.state.functions['saltutil.sync_all'](list(matches),
                                                           refresh=False)
         if syncd['grains']:
@@ -3974,13 +3992,25 @@ class BaseHighState(object):
                             'No matching salt environment for environment '
                             '\'{0}\' found'.format(saltenv)
                         )
+                    # first match is highest priority
+                    if statefiles:
+                        break
 
                 # if we did not found any sls in the fileserver listing, this
                 # may be because the sls was generated or added later, we can
                 # try to directly execute it, and if it fails, anyway it will
                 # return the former error
                 if not statefiles:
-                    statefiles.append((saltenvs[0], sls_match))
+                    if len(saltenvs) > 1:
+                        all_errors.append(
+                            'No matching sls for environments '
+                            '{0} found'.format(saltenvs)
+                        )
+                    else:
+                        all_errors.append(
+                            'No matching sls for environment '
+                            '\'{0}\' found'.format(saltenv)
+                        )
 
                 for (saltenv, sls) in statefiles:
                     r_env = '{0}:{1}'.format(saltenv, sls)

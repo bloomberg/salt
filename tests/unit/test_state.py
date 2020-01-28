@@ -8,7 +8,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import os
 import shutil
 import tempfile
-
+import copy
 # Import Salt Testing libs
 import tests.integration as integration
 from tests.support.unit import TestCase, skipIf
@@ -16,7 +16,8 @@ from tests.support.mock import (
     NO_MOCK,
     NO_MOCK_REASON,
     MagicMock,
-    patch)
+    patch,
+    call)
 from tests.support.mixins import AdaptedConfigurationTestCaseMixin
 from tests.support.runtests import RUNTIME_VARS
 
@@ -222,6 +223,7 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
         self.config = self.get_temp_config('minion', **overrides)
         self.addCleanup(delattr, self, 'config')
         self.highstate = salt.state.HighState(self.config)
+        self.fs = salt.fileserver.Fileserver(self.config)
         self.addCleanup(delattr, self, 'highstate')
         self.highstate.push_active()
 
@@ -290,6 +292,8 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
             os.path.join(self.state_tree_dir, sls_dir, 'top.sls'),
             self.state_tree_dir
         )
+        self.fs.clear_file_list_cache({'saltenv': 'base'})
+        self.highstate = salt.state.HighState(self.config)
         # Manually compile the high data. We don't have to worry about all of
         # the normal error checking we do here since we know that all the SLS
         # files exist and there is no whitelist/blacklist being used.
@@ -298,6 +302,55 @@ class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
         high, _ = self.highstate.render_highstate(matches)
         ret = salt.state.find_sls_ids('issue-47182.stateA.newer', high)
         self.assertEqual(ret, [('somestuff', 'cmd')])
+
+
+@skipIf(NO_MOCK, NO_MOCK_REASON)
+@skipIf(pytest is None, 'PyTest is missing')
+class HighStateTestCase(TestCase, AdaptedConfigurationTestCaseMixin):
+    '''
+    TestCase for code handling HighState.
+    '''
+    def test_load_dynamic_false(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = False
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args_list, [])
+
+    def test_load_dynamic_true(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = True
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
+
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args, call(['cats'], refresh=False))
+
+    def test_load_dynamic_all(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = "all"
+        base_highstate_obj = salt.state.HighState(opts)
+        mock_cmd = MagicMock()
+        base_highstate_obj.state.functions = {'saltutil.sync_all': mock_cmd}
+
+        ret = base_highstate_obj.load_dynamic(['cats'])
+        self.assertEqual(ret, None)
+        self.assertEqual(mock_cmd.call_args, call(['base', 'prod'], refresh=False))
+
+    def test_load_dynamic_bad_dynamic_modules_option(self):
+        opts = copy.deepcopy(self.get_temp_config('master'))
+        opts['autoload_dynamic_modules'] = 'foo'
+        base_highstate_obj = salt.state.HighState(opts)
+
+        with pytest.raises(ValueError) as option_err:
+            ret = base_highstate_obj.load_dynamic(['cats'])
+
+        self.assertEqual((str(option_err.value)), '"foo" is an invalid value for "autoload_dynamic_modules"')
 
 
 @skipIf(NO_MOCK, NO_MOCK_REASON)

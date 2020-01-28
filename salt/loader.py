@@ -682,6 +682,22 @@ def _load_cached_grains(opts, cfn):
         return cached_grains
     except (IOError, OSError):
         return None
+    except Exception:
+        log.error(
+            'Failed to load serialized cached grain file. %s.\n'
+            'Removing file\n'
+            'syntax error:\n', cfn, exc_info=True
+        )
+        try:
+            if os.path.isfile(cfn): # Maybe file is gone by the time we try to remove
+                os.remove(cfn)  # removing the file will have no effects, especially if youre removing it because its corrupt. just means next time around it will get regenerated
+        except Exception:
+            log.error(
+                'Couldnt remove corrupt cached grain file. %s.\n'
+                'syntax error:\n', cfn, exc_info=True
+            )
+            pass
+        return None
 
 
 def grains(opts, force_refresh=False, proxy=None):
@@ -1529,11 +1545,6 @@ class LazyLoader(salt.utils.lazy.LazyDict):
         # do we have a partial match?
         for k in self.file_mapping:
             if mod_name in k:
-                yield k
-
-        # anyone else? Bueller?
-        for k in self.file_mapping:
-            if mod_name not in k:
                 yield k
 
     def _reload_submodules(self, mod):

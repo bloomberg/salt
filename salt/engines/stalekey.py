@@ -47,7 +47,7 @@ def __virtual__():
 def _get_keys():
     keys = salt.key.get_key(__opts__)
     minions = keys.all_keys()
-    return minions['minions']
+    return [six.ensure_binary(minion) for minion in minions['minions']]
 
 
 def start(interval=3600, expire=604800):
@@ -89,11 +89,12 @@ def start(interval=3600, expire=604800):
         stale_keys = []
         for m, seen in six.iteritems(minions):
             if now - expire > seen:
-                stale_keys.append(m)
+                stale_keys.append(six.ensure_str(m))
 
         if len(stale_keys):
             for k in stale_keys:
                 log.info('Removing stale key for %s', k)
+                minions.pop(k, None)
             wheel.cmd('key.delete', stale_keys)
 
             pillar_util = salt.utils.master.MasterPillarUtil(','.join(stale_keys), 'list',
@@ -106,7 +107,6 @@ def start(interval=3600, expire=604800):
                                                  clear_grains=True,
                                                  clear_mine=True)
 
-            del minions[k]
 
         try:
             with salt.utils.files.fopen(presence_file, 'wb') as f:

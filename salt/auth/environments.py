@@ -30,7 +30,7 @@ def acl(id=None, grains=None, **kwargs):
 
     for tenancy in tenancies:
         if tenancy in __opts__['external_auth']['never']:
-            acl.append(__opts__['external_auth']['never'][tenancy])
+            acl = acl + __opts__['external_auth']['never'][tenancy]
 
     # we dont want to return an empty list as there is an upstream 'is None' check
     # to use the defaults, [] would override that.

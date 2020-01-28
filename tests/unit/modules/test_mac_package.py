@@ -4,7 +4,7 @@
 from __future__ import absolute_import, unicode_literals, print_function
 
 # Import Salt Libs
-import salt.modules.mac_package as macpackage
+import salt.modules.macpackage as macpackage
 
 # Import Salt Testing Libs
 from tests.support.mixins import LoaderModuleMockMixin
@@ -125,7 +125,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test getting a the id for a package
         '''
-        with patch('salt.modules.mac_package._get_pkg_id_from_pkginfo') as pkg_id_pkginfo_mock:
+        with patch('salt.modules.macpackage._get_pkg_id_from_pkginfo') as pkg_id_pkginfo_mock:
             expected = ['com.apple.this']
             cmd_mock = MagicMock(side_effect=[
                 '/path/to/PackageInfo\n/path/to/some/other/fake/PackageInfo',
@@ -162,7 +162,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test getting a the id for a package with a directory
         '''
-        with patch('salt.modules.mac_package._get_pkg_id_dir') as pkg_id_dir_mock:
+        with patch('salt.modules.macpackage._get_pkg_id_dir') as pkg_id_dir_mock:
             expected = ['com.apple.this']
             pkg_id_dir_mock.return_value = ['com.apple.this']
             cmd_mock = MagicMock(return_value='Error opening /path/to/file.pkg')
@@ -186,7 +186,7 @@ class MacPackageTestCase(TestCase, LoaderModuleMockMixin):
         '''
             Test getting the ids of a mpkg file
         '''
-        with patch('salt.modules.mac_package.get_pkg_id') as get_pkg_id_mock:
+        with patch('salt.modules.macpackage.get_pkg_id') as get_pkg_id_mock:
             expected = ['com.apple.this', 'com.salt.other']
             mock = MagicMock(return_value='/tmp/dmg-X/file.pkg\n/tmp/dmg-X/other.pkg')
             get_pkg_id_mock.side_effect = [['com.apple.this'], ['com.salt.other']]

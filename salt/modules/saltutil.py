@@ -1446,20 +1446,33 @@ def cmd(tgt,
 
         salt '*' saltutil.cmd
     '''
-    # if auth_check is in the current request context, we must propogate it
-    if 'auth_check' in kwargs:
-        raise AuthorizationError('auth_check found in saltutil.cmd kwargs. Someone is trying to be clever and circumvent acl')
-
-    if RequestContext.current.get('auth_check'):
-        log.debug('RequestContext.current auth_check: %s', RequestContext.current['auth_check'])
-        kwargs['auth_check'] = RequestContext.current['auth_check']
-
-    if RequestContext.current.get('eauth') == 'runas':
-        if not RequestContext.current.get('eauth_opts'):
+    ctx = RequestContext.current
+    if ctx.get('eauth') == 'runas':
+        if not ctx.get('eauth_opts'):
             raise CommandExecutionError('runas requires eauth_opts in RequestContext to function. Something has gone wrong')
-        if RequestContext.current.get('eauth_opts', {}).get('executor'):
+        if ctx.get('eauth_opts', {}).get('executor'):
             kwargs['module_executors'] = ['runas']
-            kwargs['executor_opts'] = RequestContext.current['eauth_opts']
+            kwargs['executor_opts'] = ctx['eauth_opts']
+
+    # if an override is set, it should always propogate via low
+    if __opts__['opts_overrides']:
+        overrides = {}
+        for k in __opts__['opts_overrides']:
+            # if its set in context respect it, else yank from opts
+            # this allows it to be set unless its already been set
+            try:
+                overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            except KeyError:
+                raise CommandExecutionError('opts_override %s was specified, but not found in __opts__ config.', k)
+
+        kwargs['opts_overrides'] = overrides
+
+    # short-circuit if recursive to allow for user key auth
+    if ctx.get('recursive') is True:
+        pass
+    elif 'eauth_opts' in ctx:
+        for (key, val) in ctx['eauth_opts'].items():
+            kwargs[key] = val
 
     cfgfile = __opts__['conf_file']
     client = _get_ssh_or_api_client(cfgfile, ssh)
@@ -1570,13 +1583,10 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
     if eauth_opts is None:
         eauth_opts = {}
 
-    # if auth_check is in the current request context, we must propogate it
-    if 'auth_check' in kwargs:
-        raise AuthorizationError('auth_check found in saltutil.cmd kwargs. Someone is trying to be clever and circumvent acl')
-
     jid = kwargs.pop('__orchestration_jid__', jid)
     saltenv = kwargs.pop('__env__', saltenv)
     kwargs = salt.utils.args.clean_kwargs(**kwargs)
+
     if kwargs:
         kwarg.update(kwargs)
 
@@ -1588,7 +1598,6 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
     else:
         opts = __opts__
         rclient = salt.runner.RunnerClient(opts)
-
     if name in rclient.functions:
         aspec = salt.utils.args.get_function_argspec(rclient.functions[name])
         if 'saltenv' in aspec.args:
@@ -1607,33 +1616,50 @@ def runner(name, arg=None, kwarg=None, full_return=False, saltenv='base', jid=No
 
     masterless = __opts__['__role'] == 'minion' and \
              __opts__['file_client'] == 'local'
-
     local = __opts__['local']
+    ctx = RequestContext.current
+    recursive = ctx.get('recursive', False)
 
     master_key = salt.utils.master.get_master_key('root', opts)
     low = {'arg': arg, 'kwarg': kwarg, 'fun': name, 'key': master_key}
+
+    # if an override is set, it should always propogate via low
+    if __opts__['opts_overrides']:
+        overrides = {}
+        for k in __opts__['opts_overrides']:
+            # if its set in context respect it, else yank from opts
+            # this allows it to be set unless its already been set
+            try:
+                overrides[k] = ctx.get('opts_overrides', {}).get(k, __opts__[k])
+            except KeyError:
+                raise CommandExecutionError('opts_override %s was specified, but not found in __opts__ config.', k)
+
+        kwargs['opts_overrides'] = overrides
+
     if eauth:
         low['eauth'] = eauth
     if eauth_opts:
         low['eauth_opts'] = eauth_opts
-    if 'auth_check' in RequestContext.current:
-        log.debug('RequestContext.current auth_check: %s', RequestContext.current['auth_check'])
-        low['auth_check'] = RequestContext.current['auth_check']
 
-    if masterless or local:
-        ret = rclient.cmd(name, arg=arg, kwarg=kwarg, print_event=False, full_return=full_return)
-        # we have to cheat and fake out the envelope cmd_sync/cmd_async provide
-        if isinstance(ret, dict) and 'jid' in ret:
-            jid = ret['jid']
-            ret = {'data': ret, 'jid': 'salt/run/{}'.format(jid)}
+    if masterless or local or recursive:
+        if asynchronous:
+            ret = rclient.asynchronous(low['fun'], low, user=low.get('user'))
         else:
-            ret = {'data': ret}
-
-        return ret
-    elif asynchronous:
-        return rclient.cmd_async(low)
+            ret = rclient.cmd(name, arg=arg, kwarg=kwarg, print_event=False, full_return=full_return)
     else:
-        return rclient.cmd_sync(low, full_return=full_return, timeout=timeout)
+        # these differ from what is provided by kwarg
+        # these are the currently executing user credentials
+        # if someone were to provide eauth/eauth_opts it would be for ie auth.runas
+        if 'eauth_opts' in ctx:
+            low.update(ctx['eauth_opts'])
+
+        if asynchronous:
+            ret = rclient.cmd_async(low)
+        else:
+            ret = rclient.cmd_sync(low, full_return=full_return, timeout=timeout)
+        if isinstance(ret, dict):
+            ret = ret.get('data', ret)
+    return ret
 
 def wheel(name, *args, **kwargs):
     '''
@@ -1675,10 +1701,6 @@ def wheel(name, *args, **kwargs):
         their return data.
 
     '''
-    # if auth_check is in the current request context, we must propogate it
-    if 'auth_check' in kwargs:
-        raise AuthorizationError('auth_check found in saltutil.cmd kwargs. Someone is trying to be clever and circumvent acl')
-
     jid = kwargs.pop('__orchestration_jid__', None)
     saltenv = kwargs.pop('__env__', 'base')
 
@@ -1720,9 +1742,14 @@ def wheel(name, *args, **kwargs):
         master_key = salt.utils.master.get_master_key('root', opts)
         low = {'arg': args, 'kwarg': kwargs, 'fun': name, 'key': master_key}
 
-        if 'auth_check' in RequestContext.current:
-            log.debug('RequestContext.current auth_check: %s', RequestContext.current['auth_check'])
-            low['auth_check'] = RequestContext.current['auth_check']
+        ctx = RequestContext.current
+
+        # if an override is set, it should always propogate via low
+        if __opts__['opts_overrides']:
+            low['opts_overrides'] = __opts__['opts_overrides']
+        if 'auth_check' in ctx:
+            log.debug('RequestContext.current auth_check: %s', ctx['auth_check'])
+            low['auth_check'] = ctx['auth_check']
 
         if kwargs.pop('asynchronous', False):
             ret = wheel_client.cmd_async(low)

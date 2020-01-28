@@ -123,10 +123,10 @@ def state(name,
         fail_minions=None,
         allow_fail=0,
         exclude=None,
-        concurrent=False,
+        concurrent=None,
         timeout=None,
         batch=None,
-        queue=False,
+        queue=None,
         subset=None,
         orchestration_jid=None,
         failhard=None,
@@ -310,10 +310,15 @@ def state(name,
 
     cmd_kw['tgt_type'] = tgt_type
     cmd_kw['ssh'] = ssh
+
     if 'roster' in kwargs:
         cmd_kw['roster'] = kwargs['roster']
+
     cmd_kw['expect_minions'] = expect_minions
-    cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
+    if 'asynchronous' in kwargs:
+        cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
     if highstate:
         fun = 'state.highstate'
     elif top:
@@ -347,10 +352,13 @@ def state(name,
     if force is not None:
         cmd_kw['kwarg']['force'] = force
 
-    cmd_kw['kwarg']['queue'] = queue
+    if queue is not None:
+        cmd_kw['kwarg']['queue'] = queue
 
     if isinstance(concurrent, bool):
         cmd_kw['kwarg']['concurrent'] = concurrent
+    elif concurrent is None:
+        pass
     else:
         state_ret['comment'] = ('Must pass in boolean for value of \'concurrent\'')
         state_ret['result'] = False
@@ -395,7 +403,7 @@ def state(name,
                 isinstance(tmp_ret, dict) else 'highstate'
         }}
 
-    if cmd_kw['asynchronous']:
+    if cmd_kw.get('asynchronous', False):
         state_ret['__jid__'] = cmd_ret.get('jid')
         state_ret['changes'] = cmd_ret
         if int(cmd_ret.get('jid', 0)) > 0:
@@ -590,7 +598,9 @@ def function(
     cmd_kw['ssh'] = ssh
     cmd_kw['expect_minions'] = expect_minions
     cmd_kw['_cmd_meta'] = True
-    cmd_kw['asynchronous'] = kwargs.pop('asynchronous', False)
+
+    if 'asynchronous' in kwargs:
+        cmd_kw['asynchronous'] = kwargs.pop('asynchronous')
 
     if failhard is True or __opts__.get('failhard'):
         cmd_kw['failhard'] = True
@@ -627,7 +637,7 @@ def function(
         func_ret['comment'] = six.text_type(exc)
         return func_ret
 
-    if cmd_kw['asynchronous']:
+    if cmd_kw.get('asynchronous'):
         func_ret['__jid__'] = cmd_ret.get('jid')
         func_ret['changes'] = cmd_ret
         if int(cmd_ret.get('jid', 0)) > 0:
@@ -858,11 +868,12 @@ def runner(name, **kwargs):
         out['return'] = out.copy()
         out['success'] = 'jid' in out and 'tag' in out
 
-    runner_return = out.get('data', {}).get('return')
+    runner_return = out.get('return')
+
     if isinstance(runner_return, dict) and ('Error' in runner_return or 'error' in runner_return):
         success = False
     else:
-        success = out.get('data', {}).get('success', True)
+        success = out.get('success', True)
 
     ret = {'name': name,
            'changes': {'return': runner_return},
@@ -1119,11 +1130,11 @@ def wheel(name, **kwargs):
             ret['comment'] = 'wheel failed to run.'
         return ret
 
-    wheel_return = out.get('data', {}).get('return')
+    wheel_return = out.get('return')
     if isinstance(wheel_return, dict) and 'Error' in wheel_return:
         success = False
     else:
-        success = out.get('data', {}).get('success', True)
+        success = out.get('success', True)
     ret = {'name': name,
            'changes': {'return': wheel_return},
            'result': success}

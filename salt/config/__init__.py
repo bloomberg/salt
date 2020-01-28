@@ -14,8 +14,6 @@ import logging
 import types
 from copy import deepcopy
 
-import pprint;
-
 # pylint: disable=import-error,no-name-in-module
 from salt.ext import six
 from salt.ext.six.moves.urllib.parse import urlparse
@@ -239,6 +237,9 @@ VALID_OPTS = {
     # live in the cache dir.
     'backup_mode': six.string_types,
 
+    # if specified, a list of opt vars that can be overridden in low data for master
+    'opts_overrides': list,
+
     # A default renderer for all operations on this host
     'renderer': six.string_types,
 
@@ -252,13 +253,18 @@ VALID_OPTS = {
     'failhard': bool,
 
     # A flag to indicate that highstate runs should force refresh the modules prior to execution
-    'autoload_dynamic_modules': bool,
+    # Setting to "matches" is the same behavior as True (It will only sync environments that match with top.sls)
+    # Setting to "all" includes all known environments as found in the ext pillar environments
+    'autoload_dynamic_modules': (bool, six.string_types),
 
     # Force the minion into a single environment when it fetches files from the master
     'saltenv': (type(None), six.string_types),
 
     # Prevent saltenv from being overridden on the command line
     'lock_saltenv': bool,
+
+    # Prevent pillarenv from being overridden on the command line
+    'lock_pillarenv': bool,
 
     # Force the minion into a single pillar root when it fetches pillar data from the master
     'pillarenv': (type(None), six.string_types),
@@ -270,6 +276,9 @@ VALID_OPTS = {
     'state_top': six.string_types,
 
     'state_top_saltenv': (type(None), six.string_types),
+
+    # default state queue behavior
+    'state_queue': bool,
 
     # States to run when a minion starts up
     'startup_states': six.string_types,
@@ -1236,6 +1245,10 @@ VALID_OPTS = {
 
     # Enable calling ssh minions from the salt master
     'enable_ssh_minions': bool,
+
+    # Allow raw_shell option when using the ssh
+    # client via the Salt API
+    'netapi_allow_raw_shell': bool,
 }
 
 # default configurations
@@ -1246,6 +1259,7 @@ DEFAULT_MINION_OPTS = {
     'master_uri_format': 'default',
     'source_interface_name': '',
     'source_address': '',
+    'opts_overrides': [],
     'source_ret_port': 0,
     'source_publish_port': 0,
     'master_port': 4506,
@@ -1284,6 +1298,7 @@ DEFAULT_MINION_OPTS = {
     'autoload_dynamic_modules': True,
     'saltenv': None,
     'lock_saltenv': False,
+    'lock_pillarenv': False,
     'pillarenv': None,
     'pillarenv_from_saltenv': False,
     'pillar_opts': False,
@@ -1299,6 +1314,7 @@ DEFAULT_MINION_OPTS = {
     'state_top': 'top.sls',
     'state_top_saltenv': None,
     'startup_states': '',
+    'state_queue': False,
     'sls_list': [],
     'top_file': '',
     'thorium_interval': 0.5,
@@ -1590,9 +1606,11 @@ DEFAULT_MASTER_OPTS = {
         'base': [salt.syspaths.BASE_THORIUM_ROOTS_DIR],
         },
     'top_file_merging_strategy': 'merge',
+    'opts_overrides': [],
     'env_order': [],
     'saltenv': None,
     'lock_saltenv': False,
+    'lock_pillarenv': False,
     'pillarenv': None,
     'default_top': 'base',
     'file_client': 'local',
@@ -1900,6 +1918,8 @@ DEFAULT_MASTER_OPTS = {
     'auth_events': True,
     'minion_data_cache_events': True,
     'enable_ssh_minions': False,
+    'netapi_allow_raw_shell': False,
+    'state_queue': False,
 }
 
 

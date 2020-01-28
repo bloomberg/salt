@@ -33,14 +33,25 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-def master():
+def master(count=False):
     '''
     Return the actively executing runners for the master
+
+    count : False
+        if true, return a len() of the job count, not the job details
+
     CLI Example:
+
     .. code-block:: bash
         salt-run jobs.master
+
     '''
-    return salt.utils.master.get_running_jobs(__opts__)
+    jobs = salt.utils.master.get_running_jobs(__opts__)
+
+    if count:
+        return len(jobs)
+    else:
+        return jobs
 
 
 def active(display_progress=False):
@@ -73,7 +84,7 @@ def active(display_progress=False):
             continue
         for job in data:
             if not job['jid'] in ret:
-                ret[job['jid']] = _format_jid_instance(job['jid'], job)
+                ret[job['jid']] = salt.utils.jid.format_jid_instance(job['jid'], job)
                 ret[job['jid']].update({'Running': [{minion: job.get('pid', None)}], 'Returned': []})
             else:
                 ret[job['jid']]['Running'].append({minion: job['pid']})
@@ -139,7 +150,6 @@ def lookup_jid(jid,
             ext_source=ext_source,
             display_progress=display_progress
         )
-
     except TypeError:
         return ('Requested returner could not be loaded. '
                 'No JIDs could be retrieved.')
@@ -174,6 +184,10 @@ def lookup_jid(jid,
 
     # inflight jobs could still be empty dict
     if not ret:
+        return ret
+
+    # if ret already has outputter just leave it
+    if 'outputter' in ret:
         return ret
 
     if not outputter:
@@ -224,7 +238,7 @@ def list_job(jid, ext_source=None, display_progress=False):
     job = mminion.returners['{0}.get_load'.format(returner)](jid)
     returns = mminion.returners['{0}.get_jid'.format(returner)](jid)
 
-    ret.update(_format_jid_instance(jid, job, returns))
+    ret.update(salt.utils.jid.format_jid_instance(jid, job, returns))
 
     # transfer to an ordered dict so we can have a visually sensible order
     ordered_ret = OrderedDict()
@@ -243,8 +257,13 @@ def list_jobs(ext_source=None,
               search_metadata=None,
               search_function=None,
               search_target=None,
+              metadata=None,
+              function=None,
+              target=None,
               start_time=None,
               end_time=None,
+              contains=None,
+              limit=100,
               display_progress=False):
     '''
     List all detectable jobs and associated functions
@@ -258,7 +277,10 @@ def list_jobs(ext_source=None,
         If more than one of the below options are used, only jobs which match
         *all* of the filters will be returned.
 
-    search_metadata
+    .. note::
+        search_ prefix for below query args are an optional alias.
+
+    metadata/search_metadata
         Specify a dictionary to match to the job's metadata. If any of the
         key-value pairs in this dictionary match, the job will be returned.
         Example:
@@ -267,7 +289,7 @@ def list_jobs(ext_source=None,
 
             salt-run jobs.list_jobs search_metadata='{"foo": "bar", "baz": "qux"}'
 
-    search_function
+    function/search_function
         Can be passed as a string or a list. Returns jobs which match the
         specified function. Globbing is allowed. Example:
 
@@ -284,7 +306,7 @@ def list_jobs(ext_source=None,
 
                 salt-run jobs.list_jobs search_function='test.*,pkg.install'
 
-    search_target
+    target/search_target
         Can be passed as a string or a list. Returns jobs which match the
         specified minion name. Globbing is allowed. Example:
 
@@ -311,6 +333,13 @@ def list_jobs(ext_source=None,
         module is not installed, this argument will be ignored). Returns jobs
         which started before this timestamp.
 
+    limit
+        maximum amount of job records to return. defaults to 100
+
+    contains
+        if returner supports it, an arbitrary @> postgres style contains filter.
+        if specified as a list, it is considered multiple separate conditions to OR together.
+
     .. _dateutil: https://pypi.python.org/pypi/python-dateutil
 
     CLI Example:
@@ -322,6 +351,11 @@ def list_jobs(ext_source=None,
         salt-run jobs.list_jobs start_time='2015, Mar 16 19:00' end_time='2015, Mar 18 22:00'
 
     '''
+    search_target = search_target or target
+    search_function = search_function or function
+    search_metadata = search_metadata or metadata
+
+    # backend optimized implementation
     returner = _get_returner((
         __opts__['ext_job_cache'],
         ext_source,
@@ -334,68 +368,79 @@ def list_jobs(ext_source=None,
         )
     mminion = salt.minion.MasterMinion(__opts__)
 
-    ret = mminion.returners['{0}.get_jids'.format(returner)]()
-
     mret = {}
-    for item in ret:
-        _match = True
-        if search_metadata:
-            _match = False
-            if 'Metadata' in ret[item]:
-                if isinstance(search_metadata, dict):
-                    for key in search_metadata:
-                        if key in ret[item]['Metadata']:
-                            if ret[item]['Metadata'][key] == search_metadata[key]:
+
+    if '{0}.list_jobs'.format(returner) in mminion.returners:
+        mret = mminion.returners['{0}.list_jobs'.format(returner)](
+            metadata=search_metadata,
+            function=search_function,
+            target=search_target,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        )
+    else:
+        ret = mminion.returners['{0}.get_jids'.format(returner)]()
+
+        for item in ret:
+            _match = True
+            if search_metadata:
+                _match = False
+                if 'Metadata' in ret[item]:
+                    if isinstance(search_metadata, dict):
+                        for key in search_metadata:
+                            if key in ret[item]['Metadata']:
+                                if ret[item]['Metadata'][key] == search_metadata[key]:
+                                    _match = True
+                    else:
+                        log.info('The search_metadata parameter must be specified'
+                                 ' as a dictionary.  Ignoring.')
+            if search_target and _match:
+                _match = False
+                if 'Target' in ret[item]:
+                    targets = ret[item]['Target']
+                    if isinstance(targets, six.string_types):
+                        targets = [targets]
+                    for _target in targets:
+                        for key in salt.utils.args.split_input(search_target):
+                            if fnmatch.fnmatch(_target, key):
                                 _match = True
-                else:
-                    log.info('The search_metadata parameter must be specified'
-                             ' as a dictionary.  Ignoring.')
-        if search_target and _match:
-            _match = False
-            if 'Target' in ret[item]:
-                targets = ret[item]['Target']
-                if isinstance(targets, six.string_types):
-                    targets = [targets]
-                for target in targets:
-                    for key in salt.utils.args.split_input(search_target):
-                        if fnmatch.fnmatch(target, key):
+
+            if search_function and _match:
+                _match = False
+                if 'Function' in ret[item]:
+                    for key in salt.utils.args.split_input(search_function):
+                        if fnmatch.fnmatch(ret[item]['Function'], key):
                             _match = True
 
-        if search_function and _match:
-            _match = False
-            if 'Function' in ret[item]:
-                for key in salt.utils.args.split_input(search_function):
-                    if fnmatch.fnmatch(ret[item]['Function'], key):
+            if start_time and _match:
+                _match = False
+                if DATEUTIL_SUPPORT:
+                    parsed_start_time = dateutil_parser.parse(start_time)
+                    _start_time = dateutil_parser.parse(ret[item]['StartTime'])
+                    if _start_time >= parsed_start_time:
                         _match = True
+                else:
+                    log.error(
+                        '\'dateutil\' library not available, skipping start_time '
+                        'comparison.'
+                    )
 
-        if start_time and _match:
-            _match = False
-            if DATEUTIL_SUPPORT:
-                parsed_start_time = dateutil_parser.parse(start_time)
-                _start_time = dateutil_parser.parse(ret[item]['StartTime'])
-                if _start_time >= parsed_start_time:
-                    _match = True
-            else:
-                log.error(
-                    '\'dateutil\' library not available, skipping start_time '
-                    'comparison.'
-                )
+            if end_time and _match:
+                _match = False
+                if DATEUTIL_SUPPORT:
+                    parsed_end_time = dateutil_parser.parse(end_time)
+                    _start_time = dateutil_parser.parse(ret[item]['StartTime'])
+                    if _start_time <= parsed_end_time:
+                        _match = True
+                else:
+                    log.error(
+                        '\'dateutil\' library not available, skipping end_time '
+                        'comparison.'
+                    )
 
-        if end_time and _match:
-            _match = False
-            if DATEUTIL_SUPPORT:
-                parsed_end_time = dateutil_parser.parse(end_time)
-                _start_time = dateutil_parser.parse(ret[item]['StartTime'])
-                if _start_time <= parsed_end_time:
-                    _match = True
-            else:
-                log.error(
-                    '\'dateutil\' library not available, skipping end_time '
-                    'comparison.'
-                )
-
-        if _match:
-            mret[item] = ret[item]
+            if _match:
+                mret[item] = ret[item]
 
     if outputter:
         return {'outputter': outputter, 'data': mret}
@@ -468,7 +513,7 @@ def print_job(jid, ext_source=None):
 
     try:
         job = mminion.returners['{0}.get_load'.format(returner)](jid)
-        ret[jid] = _format_jid_instance(jid, job)
+        ret[jid] = salt.utils.jid.format_jid_instance(jid, job)
     except TypeError:
         ret[jid]['Result'] = (
             'Requested returner {0} is not available. Jobs cannot be '
@@ -566,48 +611,6 @@ def _get_returner(returner_types):
     for returner in returner_types:
         if returner and returner is not None:
             return returner
-
-
-def _format_jid_instance(jid, job, returns=None):
-    '''
-    Helper to format jid instance
-    '''
-    if not job:
-        ret = {'Error': 'Cannot contact returner or no job with this jid'}
-        return ret
-
-    _return = job.get('return')
-    if isinstance(_return, dict) and _return.get('fun', '').startswith('runner.'):
-        _job = job['return']
-        ret = {'Function': _job.get('fun', 'unknown-function'),
-               'Arguments': list(_job.get('fun_args', [])),
-               'User': _job.get('user', 'root'),
-               # unlikely but safeguard from invalid returns
-               'Target': job.get('tgt', 'unknown-target'),
-               'Target-type': job.get('tgt_type', 'list'),}
-        # load contents for runners is equiv to returns, so we discard / dont need
-        ret['Results'] = _job['return']
-    else:
-        ret = {'Function': job.get('fun', 'unknown-function'),
-               'Arguments': list(job.get('arg', [])),
-               'User': job.get('user', 'root'),
-               # unlikely but safeguard from invalid returns
-               'Target': job.get('tgt', 'unknown-target'),
-               'Target-type': job.get('tgt_type', 'list'),}
-        ret['Results'] = returns
-
-    if 'metadata' in job:
-        ret['Metadata'] = job.get('metadata', {})
-    else:
-        if 'kwargs' in job:
-            if 'metadata' in job['kwargs']:
-                ret['Metadata'] = job['kwargs'].get('metadata', {})
-
-    if 'Minions' in job:
-        ret['Minions'] = job['Minions']
-
-    ret.update({'StartTime': salt.utils.jid.jid_to_time(jid)})
-    return ret
 
 
 def _walk_through(job_dir, display_progress=False):

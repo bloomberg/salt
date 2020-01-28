@@ -131,7 +131,7 @@ def destroy(device):
     stop_cmd = ['mdadm', '--stop', device]
     zero_cmd = ['mdadm', '--zero-superblock']
 
-    if __salt__['cmd.retcode'](stop_cmd, python_shell=False):
+    if __salt__['cmd.retcode'](stop_cmd, python_shell=False) == 0:
         for number in details['members']:
             zero_cmd.append(details['members'][number]['device'])
         __salt__['cmd.retcode'](zero_cmd, python_shell=False)
@@ -293,7 +293,7 @@ def save_config():
     try:
         vol_d = dict([(line.split()[1], line) for line in scan])
         for vol in vol_d:
-            pattern = r'^ARRAY\s+{0}.*$'.format(re.escape(vol))
+            pattern = r'^ARRAY\s+{0}\s+.*$'.format(re.escape(vol))
             __salt__['file.replace'](cfg_file, pattern, vol_d[vol], append_if_not_found=True)
     except SaltInvocationError:  # File is missing
         __salt__['file.write'](cfg_file, args=scan)

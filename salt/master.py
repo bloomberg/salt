@@ -1070,9 +1070,6 @@ class MWorker(salt.utils.process.SignalHandlingMultiprocessingProcess):
             return False
 
         context = {'opts': self.opts}
-        # only add auth_check if it is already present, dont set an empty default
-        if 'auth_check' in load:
-            context['auth_check'] = load.pop('auth_check')
         # pass load down after removing auth_check
         context['data'] = load
 
@@ -1564,7 +1561,6 @@ class AESFuncs(object):
             # eauth here is irrelevant, it just needs to be not rejected by loadauth
             load['eauth'] = 'default'
             auth_list = self.loadauth.get_auth_list(load)
-
             auth_check = {'auth_list': auth_list,
                           'auth_type': '_pillar',
                           'tags': self.opts.get('loader_acl', [])}
@@ -1945,11 +1941,7 @@ class ClearFuncs(object):
         # All runner ops pass through eauth
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
 
-        # Authenticate
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
-            auth_check = RequestContext.current['auth_check']
-        else:
-            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
+        auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
 
         error = auth_check.get('error')
 
@@ -1966,7 +1958,7 @@ class ClearFuncs(object):
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
             if not permitted:
                 log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
@@ -1979,7 +1971,7 @@ class ClearFuncs(object):
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
-                clear_load.pop(item, None)
+                RequestContext.current.setdefault('eauth_opts', {})[item] = clear_load.pop(item, None)
         else:
             if 'user' in clear_load:
                 username = clear_load['user']
@@ -1994,7 +1986,22 @@ class ClearFuncs(object):
             RequestContext.current['auth_check'] = auth_check
 
             fun = clear_load.pop('fun')
-            runner_client = salt.runner.RunnerClient(self.opts)
+
+            if 'opts_overrides' in clear_load:
+                opts_overrides = clear_load.pop('opts_overrides')
+                disallowed = [k for k in opts_overrides.keys() if k not in self.opts['opts_overrides']]
+                if disallowed:
+                    log.error('opts_overrides were specified but not allowed: %s', disallowed)
+                    return {'error': {'name': err_name,
+                                       'message': 'Authentication failure of type "{0}" occurred for '
+                                                 'user "{1}".'.format(auth_type, username)}}
+                opts = copy.deepcopy(self.opts)
+                opts.update(opts_overrides)
+                RequestContext.current['opts_overrides'] = opts_overrides
+            else:
+                opts = self.opts
+
+            runner_client = salt.runner.RunnerClient(opts)
 
             # if runner is pre-subscribed from ie salt-api, honor it
             if 'jid' in clear_load:
@@ -2021,11 +2028,7 @@ class ClearFuncs(object):
         # All wheel ops pass through eauth
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(clear_load)
 
-        # Authenticate
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
-            auth_check = RequestContext.current['auth_check']
-        else:
-            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
+        auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
 
         error = auth_check.get('error')
 
@@ -2034,6 +2037,9 @@ class ClearFuncs(object):
             return {'error': error}
 
         # Authorize
+        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load:
+            auth_check = RequestContext.current['auth_check']
+
         username = auth_check.get('username')
         if auth_type != 'user':
             (permitted, recursive) = self.ckminions.wheel_check(
@@ -2041,7 +2047,7 @@ class ClearFuncs(object):
                 clear_load['fun'],
                 clear_load.get('kwarg', {})
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
             if not permitted:
                 log.info('permission failure, current auth_list: %s', auth_check.get('auth_list', []))
                 return {'error': {'name': err_name,
@@ -2053,7 +2059,7 @@ class ClearFuncs(object):
 
             # No error occurred, consume sensitive settings from the clear_load if passed.
             for item in sensitive_load_keys:
-                clear_load.pop(item, None)
+                RequestContext.current.setdefault('eauth_opts', {})[item] = clear_load.pop(item, None)
         else:
             if 'user' in clear_load:
                 username = clear_load['user']
@@ -2135,17 +2141,12 @@ class ClearFuncs(object):
         # Check for external auth calls and authenticate
         auth_type, err_name, key, sensitive_load_keys = self._prep_auth_info(extra)
 
-        # if auth_check is already in the request ctx, we don't re-authenticate, we assume
-        # from the previous call up the stack it is authenticated and just authorize
-        if 'auth_check' in RequestContext.current and 'eauth' not in clear_load and 'eauth' not in clear_load.get('kwargs', {}):
-            auth_check = RequestContext.current['auth_check']
+        if auth_type == 'user':
+            auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
         else:
-            if auth_type == 'user':
-                auth_check = self.loadauth.check_authentication(clear_load, auth_type, key=key)
-            else:
-                if 'key' in clear_load:
-                    extra['key'] = clear_load['key']
-                auth_check = self.loadauth.check_authentication(extra, auth_type)
+            if 'key' in clear_load:
+                extra['key'] = clear_load['key']
+            auth_check = self.loadauth.check_authentication(extra, auth_type)
 
         # Retrieve the minions list
         delimiter = clear_load.get('kwargs', {}).get('delimiter', DEFAULT_TARGET_DELIM)
@@ -2186,7 +2187,8 @@ class ClearFuncs(object):
                 # always accept find_job
                 whitelist=['saltutil.find_job'],
             )
-            auth_check['recursive'] = recursive
+            RequestContext.current['recursive'] = recursive
+
 
             if not permitted:
                 # Authorization error occurred. Do not continue.
@@ -2206,6 +2208,9 @@ class ClearFuncs(object):
                 # The username we are attempting to auth with
                 clear_load['user'] = self.loadauth.load_name(extra)
 
+            for item in sensitive_load_keys:
+                RequestContext.current.setdefault('eauth_opts', {})[item] = extra.pop(item, None)
+
         # If we order masters (via a syndic), don't short circuit if no minions
         # are found
         if not self.opts.get('order_masters'):
@@ -2220,16 +2225,21 @@ class ClearFuncs(object):
                     }
                 }
 
-        # store auth_check for later nested authorizations from this call
-        # only if auth_list is defined
-        if auth_check.get('auth_list'):
-            RequestContext.current['auth_check'] = auth_check
+        if 'opts_overrides' in extra:
+            opts_overrides = extra.pop('opts_overrides')
+            disallowed = [k for k in opts_overrides.keys() if k not in self.opts['opts_overrides']]
+            if disallowed:
+                log.error('opts_overrides were specified but not allowed: %s', disallowed)
+                return {'error': {'name': err_name,
+                                   'message': 'Authentication failure of type "{0}" occurred for '
+                                             'user "{1}".'.format(auth_type, username)}}
+            RequestContext.current['opts_overrides'] = opts_overrides
 
         jid = self._prep_jid(clear_load, extra)
         if jid is None:
             return {'enc': 'clear',
                     'load': {'error': 'Master failed to assign jid'}}
-        payload = self._prep_pub(minions, jid, clear_load, extra, missing)
+        payload = self._prep_pub(minions, jid, clear_load, extra, missing, auth_check)
 
         # Send it!
         self._send_ssh_pub(payload, ssh_minions=ssh_minions)
@@ -2311,7 +2321,7 @@ class ClearFuncs(object):
             log.debug('Send payload to ssh minions')
             threading.Thread(target=self.ssh_client.cmd, kwargs=load).start()
 
-    def _prep_pub(self, minions, jid, clear_load, extra, missing):
+    def _prep_pub(self, minions, jid, clear_load, extra, missing, auth_check):
         '''
         Take a given load and perform the necessary steps
         to prepare a publication.
@@ -2372,20 +2382,8 @@ class ClearFuncs(object):
                     )
 
         # always write out to the master job caches
-        try:
-            fstr = '{0}.save_load'.format(self.opts['master_job_cache'])
-            self.mminion.returners[fstr](clear_load['jid'], clear_load, minions)
-        except KeyError:
-            log.critical(
-                'The specified returner used for the master job cache '
-                '"%s" does not have a save_load function!',
-                self.opts['master_job_cache']
-            )
-        except Exception:
-            log.critical(
-                'The specified returner threw a stack trace:\n',
-                exc_info=True
-            )
+        salt.utils.job.store_job(self.opts, clear_load, minions=minions, prep_pub=True)
+
         # Set up the payload
         payload = {'enc': 'aes'}
         # Altering the contents of the publish load is serious!! Changes here
@@ -2448,9 +2446,21 @@ class ClearFuncs(object):
                 clear_load['fun'], clear_load['jid']
             )
 
-        # if there is an active auth_check in current context, pass it down
-        if 'auth_check' in RequestContext.current:
-            load['auth_check'] = RequestContext.current['auth_check']
+        # store auth_check for later nested authorizations from this call
+        # only if auth_list is defined
+        # MATT NOTE: we can reverse these two lines once the coinciding minion.py
+        # changes are fully deployed, so auth_check gets pushed to minion
+        # the end result is the same (unfettered access), but we should propogate
+        # auth_check and recursive bits if it applies to a request
+        #if auth_check.get('auth_list'):
+        if auth_check.get('auth_list') and not RequestContext.current.get('recursive'):
+            load['auth_check'] = RequestContext.current['auth_check'] = auth_check
+
+        if RequestContext.current.get('recursive'):
+            load['recursive'] = RequestContext.current.get('recursive', False)
+
+        if 'opts_overrides' in RequestContext.current:
+            load['opts_overrides'] = RequestContext.current['opts_overrides']
 
         log.debug('Published command details %s', load)
         return load

@@ -274,7 +274,7 @@ def _bind(username, password, anonymous=False, opts=None):
     return ldap_conn
 
 
-def auth(username, password):
+def auth(username, password, **kwargs):
     '''
     Simple LDAP auth
     '''

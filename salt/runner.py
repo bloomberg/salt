@@ -79,7 +79,7 @@ class RunnerClient(mixins.SyncClientMixin, mixins.AsyncClientMixin, object):
         verify_fun(self.functions, fun)
 
         eauth_creds = dict([(i, low.pop(i)) for i in [
-            'username', 'password', 'eauth', 'token', 'client', 'user', 'key', 'timeout', 'jid', 'eauth_opts', 'auth_check',
+            'username', 'password', 'eauth', 'token', 'client', 'user', 'key', 'timeout', 'jid', 'eauth_opts', 'auth_check', 'opts_overrides'
         ] if i in low])
 
         # Run name=value args through parse_input. We don't need to run kwargs
@@ -259,7 +259,13 @@ class Runner(RunnerClient):
 
             # Run the runner!
             if self.opts.get('async', False):
-                async_pub = self.cmd_async(low)
+                if self.opts.get('local'):
+                    async_pub = self.asynchronous(self.opts['fun'],
+                                                  low,
+                                                  user=user,
+                                                  pub=async_pub)
+                else:
+                    async_pub = self.cmd_async(low)
                 # by default: info will be not enough to be printed out !
                 log.warning(
                     'Running in asynchronous mode. Results of this execution may '

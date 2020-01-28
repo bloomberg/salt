@@ -821,36 +821,18 @@ class TestEventListener(AsyncTestCase):
                                                     {'sock_dir': self.sock_dir,
                                                      'transport': 'zeromq'})
             self._finished = False  # fit to event_listener's behavior
-            event_future = event_listener.get_event(self, 'evt1', callback=self.stop)  # get an event future
+            q = event_listener.get_event(self, 'evt1')  # get an event future
+
             me.fire_event({'data': 'foo2'}, 'evt2')  # fire an event we don't want
             me.fire_event({'data': 'foo1'}, 'evt1')  # fire an event we do want
+            event_future = q.get()
+            event_future.add_done_callback(self.stop)
             self.wait()  # wait for the future
 
             # check that we got the event we wanted
             self.assertTrue(event_future.done())
             self.assertEqual(event_future.result()['tag'], 'evt1')
             self.assertEqual(event_future.result()['data']['data'], 'foo1')
-
-    def test_set_event_handler(self):
-        '''
-        Test subscribing events using set_event_handler
-        '''
-        with eventpublisher_process(self.sock_dir):
-            me = salt.utils.event.MasterEvent(self.sock_dir)
-            event_listener = saltnado.EventListener({},  # we don't use mod_opts, don't save?
-                                                    {'sock_dir': self.sock_dir,
-                                                     'transport': 'zeromq'})
-            self._finished = False  # fit to event_listener's behavior
-            event_future = event_listener.get_event(self,
-                                                    tag='evt',
-                                                    callback=self.stop,
-                                                    timeout=1,
-                                                    )  # get an event future
-            me.fire_event({'data': 'foo'}, 'evt')  # fire an event we do want
-            self.wait()
-
-            # check that we subscribed the event we wanted
-            self.assertEqual(len(event_listener.timeout_map), 0)
 
     def test_timeout(self):
         '''
@@ -861,14 +843,12 @@ class TestEventListener(AsyncTestCase):
                                                     {'sock_dir': self.sock_dir,
                                                      'transport': 'zeromq'})
             self._finished = False  # fit to event_listener's behavior
-            event_future = event_listener.get_event(self,
-                                                    tag='evt1',
-                                                    callback=self.stop,
-                                                    timeout=1,
-                                                    )  # get an event future
+            q = event_listener.get_event(self, tag='evt1')  # get an event future
+            event_future = q.get(timeout=1)
+            event_future.add_done_callback(self.stop)
             self.wait()
             self.assertTrue(event_future.done())
-            with self.assertRaises(saltnado.TimeoutException):
+            with self.assertRaises(saltnado.TimeoutError):
                 event_future.result()
 
     def test_clean_by_request(self):
@@ -913,23 +893,25 @@ class TestEventListener(AsyncTestCase):
 
             self._finished = False  # fit to event_listener's behavior
             dummy_request = DummyRequest()
-            request_future_1 = event_listener.get_event(self, tag='evt1')
-            request_future_2 = event_listener.get_event(self, tag='evt2', callback=lambda f: stop())
-            dummy_request_future_1 = event_listener.get_event(dummy_request, tag='evt3', callback=lambda f: stop())
-            dummy_request_future_2 = event_listener.get_event(dummy_request, timeout=10, tag='evt4')
+            q1 = event_listener.get_event(self, tag='evt1')
+            q2 = event_listener.get_event(self, tag='evt2')
+            q3 = event_listener.get_event(self, tag='evt3')
+            q4 = event_listener.get_event(self, tag='evt4')
+            request_future_1 = q1.get()
+            request_future_2 = q2.get()
+            request_future_2.add_done_callback(lambda f: stop())
+
+            dummy_request_future_1 = q3.get()
+            dummy_request_future_1.add_done_callback(lambda f: stop())
+            dummy_request_future_2 = q4.get(timeout=1)
 
             self.assertEqual(4, len(event_listener.tag_map))
-            self.assertEqual(2, len(event_listener.request_map))
 
             me.fire_event({'data': 'foo2'}, 'evt2')
             me.fire_event({'data': 'foo3'}, 'evt3')
+            me.fire_event({'data': 'foo1'}, 'evt1')
             self.wait()
             event_listener.clean_by_request(self)
-            me.fire_event({'data': 'foo1'}, 'evt1')
-
-            self.assertTrue(request_future_1.done())
-            with self.assertRaises(saltnado.TimeoutException):
-                request_future_1.result()
 
             self.assertTrue(request_future_2.done())
             self.assertEqual(request_future_2.result()['tag'], 'evt2')
@@ -939,15 +921,7 @@ class TestEventListener(AsyncTestCase):
             self.assertEqual(dummy_request_future_1.result()['tag'], 'evt3')
             self.assertEqual(dummy_request_future_1.result()['data']['data'], 'foo3')
 
-            self.assertFalse(dummy_request_future_2.done())
-
-            self.assertEqual(2, len(event_listener.tag_map))
-            self.assertEqual(1, len(event_listener.request_map))
-
-            event_listener.clean_by_request(dummy_request)
-
-            with self.assertRaises(saltnado.TimeoutException):
+            with self.assertRaises(saltnado.TimeoutError):
                 dummy_request_future_2.result()
 
             self.assertEqual(0, len(event_listener.tag_map))
-            self.assertEqual(0, len(event_listener.request_map))

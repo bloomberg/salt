@@ -249,9 +249,10 @@ def chugid_and_umask(runas, umask, group=None):
         set_grp = True
         runas_grp = group
     else:
-        runas_grp = current_grp
+        # inherit runas users groups in chugid
+        runas_grp = None
 
-    if set_runas or set_grp:
+    if set_runas or runas_grp:
         chugid(runas_user, runas_grp)
     if umask is not None:
         os.umask(umask)  # pylint: disable=blacklisted-function
