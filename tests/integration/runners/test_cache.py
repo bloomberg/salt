@@ -12,9 +12,9 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class ManageTest(ShellCase):
+class CacheTest(ShellCase):
     '''
-    Test the manage runner
+    Test the cache runner
     '''
     def test_cache(self):
         '''
@@ -48,7 +48,7 @@ class ManageTest(ShellCase):
         )
         # Make sure we can see the new key
         expected = 'Passed invalid arguments:'
-        self.assertIn(expected, ret['return'])
+        self.assertRaisesRegex(TypeError, expected)
 
     def test_grains(self):
         '''

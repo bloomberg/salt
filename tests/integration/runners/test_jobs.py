@@ -5,22 +5,34 @@ Tests for the salt-run command
 # Import Python libs
 from __future__ import absolute_import, print_function, unicode_literals
 
+# pylint: disable=3rd-party-module-not-gated
+from salt.ext import six
+
 # Import Salt Testing libs
 from tests.support.case import ShellCase
 from tests.support.unit import skipIf
 
 
-class ManageTest(ShellCase):
+class JobsTest(ShellCase):
     '''
-    Test the manage runner
+    Test the jobs runner
     '''
+
+    def test_master(self):
+        '''
+        jobs.master
+        '''
+        ret = self.run_run_plus('jobs.master')
+        res = any(ele for ele in ret['return'] if ele['fun'] == 'runner.jobs.master')
+        self.assertTrue(res)
+
     def test_active(self):
         '''
         jobs.active
         '''
         ret = self.run_run_plus('jobs.active')
-        self.assertEqual(ret['return'], {})
-        self.assertEqual(ret['out'], [])
+        res = any(ele for ele, val in six.iteritems(ret['return']) if val['Function'] == 'runner.jobs.active')
+        self.assertTrue(res)
 
     def test_lookup_jid(self):
         '''
@@ -36,7 +48,7 @@ class ManageTest(ShellCase):
         '''
         ret = self.run_run_plus('jobs.lookup_jid')
         expected = 'Passed invalid arguments:'
-        self.assertIn(expected, ret['return'])
+        self.assertRaises(TypeError, expected)
 
     @skipIf(True, 'to be re-enabled when #23623 is merged')
     def test_list_jobs(self):
@@ -74,7 +86,7 @@ class LocalCacheTargetTest(ShellCase):
         ret = self.run_run_plus('jobs.list_jobs')
         for item in ret['return'].values():
             if item['Function'] == 'test.echo' and \
-                item['Arguments'][0] == 'target_info_test':
+               item['Arguments'][0] == 'target_info_test':
                 job_ret = item
         tgt = job_ret['Target']
         tgt_type = job_ret['Target-type']
